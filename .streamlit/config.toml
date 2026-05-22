@@ -1,0 +1,10 @@
+# Hide Streamlit's default multipage sidebar nav (we use custom navigation)
+[client]
+showSidebarNavigation = false
+
+[theme]
+primaryColor = "#1e3a5f"
+backgroundColor = "#f4f6f9"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1a2b3c"
+font = "sans serif"
