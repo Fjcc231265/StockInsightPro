@@ -125,3 +125,59 @@ def comparison_bar_chart(df: pd.DataFrame, metric: str) -> go.Figure:
     fig = go.Figure(go.Bar(x=df["Ticker"], y=df[metric], marker_color=COLORS["secondary"]))
     fig.update_layout(**_base_layout(f"Comparison — {metric} (Mock)", height=350))
     return fig
+
+
+def open_interest_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
+    """Grouped bar chart for call/put open interest."""
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=df["Strike"], y=df["Call OI"], name="Call OI", marker_color=COLORS["positive"]))
+    fig.add_trace(go.Bar(x=df["Strike"], y=df["Put OI"], name="Put OI", marker_color=COLORS["negative"]))
+    fig.update_layout(**_base_layout(f"{ticker} — Open Interest by Strike (Mock)", height=380))
+    fig.update_layout(barmode="group")
+    return fig
+
+
+def options_line_chart(df: pd.DataFrame, x_col: str, y_col: str, title: str) -> go.Figure:
+    """Reusable line chart for options intelligence indicators."""
+    fig = go.Figure(
+        go.Scatter(
+            x=df[x_col],
+            y=df[y_col],
+            mode="lines+markers",
+            name=y_col,
+            line=dict(color=COLORS["secondary"], width=2),
+            marker=dict(color=COLORS["accent"], size=6),
+        )
+    )
+    fig.update_layout(**_base_layout(title, height=360))
+    return fig
+
+
+def gamma_exposure_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
+    """Bar chart for gamma exposure by strike."""
+    colors = [COLORS["positive"] if value >= 0 else COLORS["negative"] for value in df["Gamma Exposure ($MM)"]]
+    fig = go.Figure(
+        go.Bar(
+            x=df["Strike"],
+            y=df["Gamma Exposure ($MM)"],
+            name="Gamma Exposure",
+            marker_color=colors,
+        )
+    )
+    fig.update_layout(**_base_layout(f"{ticker} — Gamma Exposure (Mock)", height=380))
+    fig.add_hline(y=0, line_color=COLORS["neutral"], line_dash="dash")
+    return fig
+
+
+def max_pain_chart(df: pd.DataFrame, max_pain: float, ticker: str) -> go.Figure:
+    """Open interest chart with a max-pain reference line."""
+    fig = open_interest_chart(df, ticker)
+    fig.update_layout(title=dict(text=f"{ticker} — Max Pain Map (Mock)", font=dict(size=14, color=COLORS["primary"])))
+    fig.add_vline(
+        x=max_pain,
+        line_dash="dash",
+        line_color=COLORS["accent"],
+        annotation_text=f"Max Pain ${max_pain:.2f}",
+        annotation_position="top",
+    )
+    return fig

@@ -6,25 +6,14 @@ from typing import Optional, Tuple
 
 import streamlit as st
 
-from data.mock_data import AVAILABLE_TICKERS
-from utils.branding import LOGO_SIDEBAR, logo_as_base64, logo_exists, wordmark_as_base64, wordmark_exists
+from services.market_data_service import get_available_tickers
+from utils.branding import LOGO_SIDEBAR, logo_as_base64, logo_exists
 from utils.constants import APP_NAME, DEFAULT_TICKER, MAIN_SECTIONS, SUBMENUS
 
 
 def _render_sidebar_brand() -> None:
-    """Sidebar wordmark (icon + app name) or fallback text."""
-    if wordmark_exists():
-        wm_b64 = wordmark_as_base64("sidebar")
-        st.markdown(
-            f"""
-            <div class="sip-sidebar-wordmark-wrap">
-                <img src="data:image/png;base64,{wm_b64}"
-                     alt="{APP_NAME} wordmark" class="sip-sidebar-wordmark" />
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    elif logo_exists():
+    """Sidebar brand block with larger icon and readable app name."""
+    if logo_exists():
         logo_b64 = logo_as_base64(LOGO_SIDEBAR)
         st.markdown(
             f"""
@@ -61,6 +50,7 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
         Tuple of (main_section, submenu_key or None)
     """
     init_session_state()
+    available_tickers = get_available_tickers()
 
     with st.sidebar:
         _render_sidebar_brand()
@@ -70,9 +60,9 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
         # Global ticker selector (available on all pages)
         st.session_state.selected_ticker = st.selectbox(
             "Symbol",
-            options=AVAILABLE_TICKERS,
-            index=AVAILABLE_TICKERS.index(st.session_state.selected_ticker)
-            if st.session_state.selected_ticker in AVAILABLE_TICKERS
+            options=available_tickers,
+            index=available_tickers.index(st.session_state.selected_ticker)
+            if st.session_state.selected_ticker in available_tickers
             else 0,
             key="sidebar_ticker",
         )

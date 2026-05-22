@@ -2,13 +2,13 @@
 
 import streamlit as st
 
-from components.cards import render_quote_cards, render_section_header, render_todo_callout
-from data.mock_data import (
+from ui.components.cards import render_todo_callout
+from ui.components.page_router import render_ticker_submenu_page
+from services.fundamental_data_service import (
     get_debt_liquidity,
     get_financial_statement,
     get_growth_metrics,
     get_profitability_metrics,
-    get_quote_summary,
     get_valuation_ratios,
 )
 
@@ -16,11 +16,6 @@ from data.mock_data import (
 def render(submenu: str) -> None:
     """Route fundamental analysis submenu."""
     ticker = st.session_state.selected_ticker
-    quote = get_quote_summary(ticker)
-    render_section_header("Fundamental Analysis", f"View: {submenu} · {ticker}")
-    render_quote_cards(quote)
-    st.divider()
-
     handlers = {
         "Income statement": lambda: _statement("income", ticker),
         "Balance sheet": lambda: _statement("balance", ticker),
@@ -30,7 +25,13 @@ def render(submenu: str) -> None:
         "Profitability metrics": _profitability,
         "Debt and liquidity": _debt_liquidity,
     }
-    handlers.get(submenu, lambda: _statement("income", ticker))()
+    render_ticker_submenu_page(
+        "Fundamental Analysis",
+        submenu,
+        handlers,
+        default_handler=lambda: _statement("income", ticker),
+        show_quote_cards=True,
+    )
 
 
 def _statement(stmt_type: str, ticker: str) -> None:

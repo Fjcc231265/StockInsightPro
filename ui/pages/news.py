@@ -2,10 +2,11 @@
 
 import streamlit as st
 
-from components.cards import render_section_header, render_todo_callout
-from components.charts import sentiment_gauge
-from data.mock_data import (
-    get_ai_summary_placeholder,
+from ui.components.cards import render_todo_callout
+from ui.components.charts import sentiment_gauge
+from ui.components.page_router import render_ticker_submenu_page
+from ai.market_interpreter import summarize_news_and_sentiment
+from services.news_data_service import (
     get_key_risks,
     get_market_catalysts,
     get_news_items,
@@ -16,9 +17,6 @@ from data.mock_data import (
 def render(submenu: str) -> None:
     """Route news and sentiment submenu."""
     ticker = st.session_state.selected_ticker
-    render_section_header("News & Sentiment", f"View: {submenu} · {ticker}")
-    st.divider()
-
     handlers = {
         "Latest news": lambda: _latest_news(ticker),
         "Sentiment score": _sentiment_score,
@@ -26,7 +24,12 @@ def render(submenu: str) -> None:
         "Market catalysts": _catalysts,
         "AI summary placeholder": lambda: _ai_summary(ticker),
     }
-    handlers.get(submenu, lambda: _latest_news(ticker))()
+    render_ticker_submenu_page(
+        "News & Sentiment",
+        submenu,
+        handlers,
+        default_handler=lambda: _latest_news(ticker),
+    )
 
 
 def _latest_news(ticker: str) -> None:
@@ -66,5 +69,5 @@ def _catalysts() -> None:
 
 def _ai_summary(ticker: str) -> None:
     """AI summary placeholder panel."""
-    st.markdown(get_ai_summary_placeholder(ticker))
+    st.markdown(summarize_news_and_sentiment(ticker))
     render_todo_callout("Connect LLM to summarize news, filings, and analyst notes.")

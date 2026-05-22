@@ -2,22 +2,25 @@
 
 import streamlit as st
 
-from components.cards import render_section_header, render_todo_callout
+from ui.components.cards import render_todo_callout
+from ui.components.page_router import render_submenu_page
 
 
 def render(submenu: str) -> None:
     """Route reports submenu."""
     ticker = st.session_state.selected_ticker
-    render_section_header("Reports", f"View: {submenu}")
-    st.divider()
-
     handlers = {
         "Generate technical report": lambda: _technical_report(ticker),
         "Generate fundamental report": lambda: _fundamental_report(ticker),
         "Combined investment thesis": lambda: _investment_thesis(ticker),
         "Export placeholder": _export_placeholder,
     }
-    handlers.get(submenu, lambda: _technical_report(ticker))()
+    render_submenu_page(
+        "Reports",
+        submenu,
+        handlers,
+        default_handler=lambda: _technical_report(ticker),
+    )
 
 
 def _technical_report(ticker: str) -> None:

@@ -3,31 +3,36 @@
 import streamlit as st
 import pandas as pd
 
-from components.cards import render_section_header, render_todo_callout
-from components.charts import comparison_bar_chart
-from data.mock_data import AVAILABLE_TICKERS, get_quote_summary, get_watchlist
+from ui.components.cards import render_todo_callout
+from ui.components.charts import comparison_bar_chart
+from ui.components.page_router import render_submenu_page
+from services.market_data_service import get_available_tickers, get_quote_summary, get_watchlist
+from utils.helpers import format_large_number
 
 
 def render(submenu: str) -> None:
     """Route portfolio watchlist submenu."""
-    render_section_header("Portfolio Watchlist", f"View: {submenu}")
-    st.divider()
-
     handlers = {
         "Add ticker": _add_ticker,
         "Track favorites": _track_favorites,
         "Alerts placeholder": _alerts,
         "Compare stocks": _compare_stocks,
     }
-    handlers.get(submenu, _track_favorites)()
+    render_submenu_page(
+        "Portfolio Watchlist",
+        submenu,
+        handlers,
+        default_handler=_track_favorites,
+    )
 
 
 def _add_ticker() -> None:
     """Add ticker to watchlist form."""
     st.markdown("**Add Symbol to Watchlist**")
+    available_tickers = get_available_tickers()
     new_ticker = st.selectbox(
         "Select ticker",
-        options=[t for t in AVAILABLE_TICKERS if t not in st.session_state.watchlist],
+        options=[t for t in available_tickers if t not in st.session_state.watchlist],
         key="add_ticker_select",
     )
     if st.button("Add to Watchlist", type="primary"):
@@ -46,8 +51,8 @@ def _track_favorites() -> None:
         rows.append(
             {
                 "Ticker": t,
-                "Price": q["price"],
-                "Change %": q["change_pct"],
+                "Price": round(q["price"], 2),
+                "Change %": round(q["change_pct"], 2),
                 "Sector": q["sector"],
             }
         )
@@ -80,7 +85,7 @@ def _compare_stocks() -> None:
     """Side-by-side stock comparison."""
     selected = st.multiselect(
         "Select tickers to compare",
-        options=AVAILABLE_TICKERS,
+        options=get_available_tickers(),
         default=st.session_state.watchlist[:3],
         max_selections=5,
     )
@@ -91,7 +96,14 @@ def _compare_stocks() -> None:
     rows = []
     for t in selected:
         q = get_quote_summary(t)
-        rows.append({"Ticker": t, "Price": q["price"], "Change %": q["change_pct"], "Volume": q["volume"]})
+        rows.append(
+            {
+                "Ticker": t,
+                "Price": round(q["price"], 2),
+                "Change %": round(q["change_pct"], 2),
+                "Volume": format_large_number(q["volume"]),
+            }
+        )
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.plotly_chart(comparison_bar_chart(df, "Change %"), use_container_width=True)

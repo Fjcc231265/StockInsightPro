@@ -2,20 +2,20 @@
 
 import streamlit as st
 
-from components.cards import render_quote_cards, render_section_header, render_todo_callout
-from components.charts import (
+from ui.components.cards import render_todo_callout
+from ui.components.charts import (
     candlestick_chart,
     macd_chart,
     price_line_chart,
     rsi_chart,
     volume_bar_chart,
 )
-from data.mock_data import (
+from ui.components.page_router import render_ticker_submenu_page
+from services.market_data_service import get_price_history
+from services.technical_data_service import (
     get_candlestick_patterns,
     get_macd_series,
     get_moving_averages_df,
-    get_price_history,
-    get_quote_summary,
     get_rsi_series,
     get_support_resistance,
     get_volume_analysis,
@@ -25,21 +25,22 @@ from data.mock_data import (
 def render(submenu: str) -> None:
     """Route technical analysis submenu to the appropriate view."""
     ticker = st.session_state.selected_ticker
-    quote = get_quote_summary(ticker)
-    render_section_header("Technical Analysis", f"View: {submenu}")
-    render_quote_cards(quote)
-    st.divider()
-
     handlers = {
-        "Price chart": _price_chart,
-        "Moving averages": _moving_averages,
-        "RSI": _rsi,
-        "MACD": _macd,
-        "Support and resistance": _support_resistance,
-        "Volume analysis": _volume_analysis,
-        "Candlestick patterns": _candlestick_patterns,
+        "Price chart": lambda: _price_chart(ticker),
+        "Moving averages": lambda: _moving_averages(ticker),
+        "RSI": lambda: _rsi(ticker),
+        "MACD": lambda: _macd(ticker),
+        "Support and resistance": lambda: _support_resistance(ticker),
+        "Volume analysis": lambda: _volume_analysis(ticker),
+        "Candlestick patterns": lambda: _candlestick_patterns(ticker),
     }
-    handlers.get(submenu, _price_chart)(ticker)
+    render_ticker_submenu_page(
+        "Technical Analysis",
+        submenu,
+        handlers,
+        default_handler=lambda: _price_chart(ticker),
+        show_quote_cards=True,
+    )
 
 
 def _price_chart(ticker: str) -> None:
@@ -69,7 +70,7 @@ def _rsi(ticker: str) -> None:
     rsi_df = get_rsi_series(ticker)
     st.plotly_chart(rsi_chart(rsi_df, ticker), use_container_width=True)
     latest = rsi_df["RSI"].iloc[-1]
-    st.info(f"Latest RSI (mock): **{latest:.1f}** — Neutral zone placeholder.")
+    st.info(f"Latest RSI (mock): **{latest:.2f}** — Neutral zone placeholder.")
     render_todo_callout("Implement 14-period RSI with divergence detection.")
 
 

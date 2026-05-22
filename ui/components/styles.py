@@ -53,7 +53,7 @@ def get_custom_css() -> str:
             background: white;
             border: 1px solid {COLORS['card_border']};
             border-radius: 8px;
-            padding: 1rem 1.25rem;
+            padding: 0.85rem 1rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.06);
             height: 100%;
         }}
@@ -66,13 +66,30 @@ def get_custom_css() -> str:
         }}
         .sip-metric-card .value {{
             color: {COLORS['primary']};
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 700;
             margin-top: 0.25rem;
+            white-space: nowrap;
+        }}
+        .sip-metric-card .delta {{
+            font-size: 0.85rem;
+            white-space: nowrap;
         }}
         .sip-metric-card .delta.positive {{ color: {COLORS['positive']}; }}
         .sip-metric-card .delta.negative {{ color: {COLORS['negative']}; }}
         .sip-metric-card .delta.neutral {{ color: {COLORS['neutral']}; }}
+
+        /* Compact native Streamlit metrics used inside panels */
+        [data-testid="stMetricValue"] {{
+            font-size: 1.2rem !important;
+            white-space: nowrap;
+        }}
+        [data-testid="stMetricLabel"] {{
+            font-size: 0.8rem !important;
+        }}
+        [data-testid="stMetricDelta"] {{
+            font-size: 0.85rem !important;
+        }}
 
         /* Section panels */
         .sip-panel {{
@@ -121,20 +138,23 @@ def get_custom_css() -> str:
         .sip-sidebar-brand-row {{
             display: flex;
             align-items: center;
-            gap: 0.65rem;
-            margin-bottom: 0.25rem;
+            gap: 0.75rem;
+            margin-bottom: 0.4rem;
+            padding: 0.45rem 0 0.35rem 0;
         }}
         .sip-sidebar-logo {{
-            width: 36px;
-            height: 36px;
+            width: 58px;
+            height: 58px;
             object-fit: contain;
-            border-radius: 8px;
+            border-radius: 10px;
+            flex-shrink: 0;
         }}
         [data-testid="stSidebar"] .sip-sidebar-brand {{
             font-weight: 700;
             color: {COLORS['primary']};
-            font-size: 1.05rem;
-            line-height: 1.2;
+            font-size: 1.35rem;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
         }}
     </style>
     """

@@ -17,13 +17,12 @@ if str(ROOT) not in sys.path:
 
 import streamlit as st
 
-from components.layout import render_app_header
-from components.sidebar import render_sidebar
-from components.styles import get_custom_css
-from pages import home, technical, fundamental, news, portfolio, reports
-from pages import settings_page
+from ui.components.layout import render_app_header
+from ui.components.sidebar import render_sidebar
+from ui.components.styles import get_custom_css
+from ui.pages import fundamental, home, news, options_intelligence, portfolio, reports, settings, technical
 from utils.branding import LOGO_SIDEBAR
-from utils.constants import APP_NAME, MAIN_SECTIONS
+from utils.constants import APP_NAME
 
 # Browser tab icon: use logo when available
 _page_icon = str(LOGO_SIDEBAR) if LOGO_SIDEBAR.exists() else "📈"
@@ -43,33 +42,24 @@ st.markdown(get_custom_css(), unsafe_allow_html=True)
 main_section, submenu = render_sidebar()
 
 # ── Main content router ─────────────────────────────────────────────────────────
-section_titles = {
-    "Home Dashboard": "Home Dashboard",
-    "Technical Analysis": "Technical Analysis",
-    "Fundamental Analysis": "Fundamental Analysis",
-    "News & Sentiment": "News & Sentiment",
-    "Portfolio Watchlist": "Portfolio Watchlist",
-    "Reports": "Reports",
-    "Settings": "Settings",
+PAGE_REGISTRY = {
+    "Home Dashboard": (home.render, False),
+    "Technical Analysis": (technical.render, True),
+    "Fundamental Analysis": (fundamental.render, True),
+    "News & Sentiment": (news.render, True),
+    "Options Intelligence": (options_intelligence.render, True),
+    "Portfolio Watchlist": (portfolio.render, True),
+    "Reports": (reports.render, True),
+    "Settings": (settings.render, True),
 }
 
-render_app_header(section_titles.get(main_section, APP_NAME))
+render_app_header(main_section)
 
 # Route to the appropriate page module based on sidebar selection
-if main_section == "Home Dashboard":
-    home.render()
-elif main_section == "Technical Analysis":
-    technical.render(submenu)
-elif main_section == "Fundamental Analysis":
-    fundamental.render(submenu)
-elif main_section == "News & Sentiment":
-    news.render(submenu)
-elif main_section == "Portfolio Watchlist":
-    portfolio.render(submenu)
-elif main_section == "Reports":
-    reports.render(submenu)
-elif main_section == "Settings":
-    settings_page.render(submenu)
+page_entry = PAGE_REGISTRY.get(main_section)
+if page_entry:
+    page_renderer, uses_submenu = page_entry
+    page_renderer(submenu) if uses_submenu else page_renderer()
 else:
     st.error("Unknown section. Please select a menu item from the sidebar.")
 

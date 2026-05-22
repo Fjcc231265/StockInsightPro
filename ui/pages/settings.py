@@ -2,21 +2,24 @@
 
 import streamlit as st
 
-from components.cards import render_section_header, render_todo_callout
+from ui.components.cards import render_todo_callout
+from ui.components.page_router import render_submenu_page
 
 
 def render(submenu: str) -> None:
     """Route settings submenu."""
-    render_section_header("Settings", f"View: {submenu}")
-    st.divider()
-
     handlers = {
         "API keys placeholder": _api_keys,
         "Data source selection": _data_sources,
         "Theme options": _theme_options,
         "User preferences": _user_preferences,
     }
-    handlers.get(submenu, _api_keys)()
+    render_submenu_page(
+        "Settings",
+        submenu,
+        handlers,
+        default_handler=_api_keys,
+    )
 
 
 def _api_keys() -> None:

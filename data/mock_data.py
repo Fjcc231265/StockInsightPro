@@ -135,7 +135,7 @@ def get_support_resistance(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Level Type": ["Resistance 2", "Resistance 1", "Pivot", "Support 1", "Support 2"],
-            "Price": [p * 1.08, p * 1.04, p, p * 0.96, p * 0.92],
+            "Price": [round(level, 2) for level in [p * 1.08, p * 1.04, p, p * 0.96, p * 0.92]],
             "Strength": ["Strong", "Moderate", "Key", "Moderate", "Strong"],
         }
     )
@@ -299,6 +299,123 @@ def get_ai_summary_placeholder(ticker: str) -> str:
     )
 
 
+def get_options_chain(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
+    """Mock options chain around spot price."""
+    # TODO: Replace with live options chain API including greeks and NBBO quotes
+    quote = get_quote_summary(ticker)
+    spot = quote["price"]
+    strikes = np.round(np.arange(spot * 0.85, spot * 1.16, spot * 0.03), 2)
+    rows = []
+    for strike in strikes:
+        moneyness = (spot - strike) / spot
+        rows.append(
+            {
+                "Strike": strike,
+                "Call Bid": round(max(0.4, spot * 0.035 + moneyness * spot * 0.35), 2),
+                "Call Ask": round(max(0.6, spot * 0.04 + moneyness * spot * 0.35), 2),
+                "Call OI": int(np.random.uniform(1_000, 18_000)),
+                "Put Bid": round(max(0.4, spot * 0.035 - moneyness * spot * 0.35), 2),
+                "Put Ask": round(max(0.6, spot * 0.04 - moneyness * spot * 0.35), 2),
+                "Put OI": int(np.random.uniform(1_000, 18_000)),
+                "IV": round(np.random.uniform(18, 55), 2),
+                "Delta": round(np.clip(0.5 + moneyness * 2.5, 0.05, 0.95), 2),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def get_options_kpis(ticker: str = DEFAULT_TICKER) -> dict:
+    """Mock options intelligence KPI summary."""
+    # TODO: Calculate from full option surface, expirations, and historical IV
+    return {
+        "Put/Call Ratio": round(np.random.uniform(0.6, 1.4), 2),
+        "IV Rank": round(np.random.uniform(25, 75), 2),
+        "30D IV": round(np.random.uniform(22, 48), 2),
+        "Max Pain": round(get_quote_summary(ticker)["price"] * np.random.uniform(0.96, 1.04), 2),
+    }
+
+
+def get_open_interest_by_strike(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
+    """Mock open interest by strike."""
+    # TODO: Aggregate live open interest across selected expirations
+    chain = get_options_chain(ticker)
+    return chain[["Strike", "Call OI", "Put OI"]].copy()
+
+
+def get_put_call_ratio_history(days: int = 30) -> pd.DataFrame:
+    """Mock put/call ratio time series."""
+    # TODO: Persist historical options volume and OI ratios
+    dates = pd.bdate_range(end=pd.Timestamp.today(), periods=days)
+    ratio = 0.95 + 0.25 * np.sin(np.linspace(0, 3 * np.pi, days)) + np.random.normal(0, 0.08, days)
+    return pd.DataFrame({"Date": dates, "Put/Call Ratio": np.round(np.clip(ratio, 0.4, 1.8), 2)})
+
+
+def get_iv_term_structure(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
+    """Mock implied volatility by expiration."""
+    # TODO: Build IV term structure from option mid prices and greeks
+    expirations = ["7D", "14D", "30D", "45D", "60D", "90D", "180D"]
+    base_iv = np.random.uniform(25, 38)
+    iv = base_iv + np.array([6, 4, 2, 1, 0, -1, -2]) + np.random.normal(0, 1.2, len(expirations))
+    return pd.DataFrame({"Expiration": expirations, "Implied Volatility": np.round(iv, 2)})
+
+
+def get_iv_rank_history(days: int = 52) -> pd.DataFrame:
+    """Mock IV rank trend."""
+    # TODO: Compare current IV to one-year IV range
+    dates = pd.bdate_range(end=pd.Timestamp.today(), periods=days)
+    rank = 45 + 20 * np.sin(np.linspace(0, 2 * np.pi, days)) + np.random.normal(0, 5, days)
+    return pd.DataFrame({"Date": dates, "IV Rank": np.round(np.clip(rank, 0, 100), 2)})
+
+
+def get_gamma_exposure(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
+    """Mock gamma exposure by strike."""
+    # TODO: Estimate dealer gamma exposure from live greeks, OI, and contract multipliers
+    quote = get_quote_summary(ticker)
+    spot = quote["price"]
+    strikes = np.round(np.arange(spot * 0.86, spot * 1.15, spot * 0.025), 2)
+    exposure = np.random.normal(0, 1.5, len(strikes)).cumsum()
+    exposure = exposure - exposure.mean()
+    return pd.DataFrame({"Strike": strikes, "Gamma Exposure ($MM)": np.round(exposure, 2)})
+
+
+def get_dealer_positioning() -> pd.DataFrame:
+    """Mock dealer positioning summary."""
+    # TODO: Infer positioning from GEX, vanna, charm, and flow data
+    return pd.DataFrame(
+        {
+            "Metric": ["Net Gamma", "Net Delta", "Vanna Risk", "Charm Pressure", "Regime"],
+            "Value": ["+1.8B", "-420M", "Moderate", "Positive", "Long Gamma"],
+            "Interpretation": ["Stabilizing", "Dealer short delta", "Watch IV moves", "Supportive", "Mean-reversion bias"],
+        }
+    )
+
+
+def get_options_flow() -> pd.DataFrame:
+    """Mock options flow tape."""
+    # TODO: Stream unusual options activity and classify opening vs closing flow
+    return pd.DataFrame(
+        {
+            "Time": ["09:38", "10:12", "10:47", "11:25", "13:03", "14:18"],
+            "Side": ["CALL", "PUT", "CALL", "CALL", "PUT", "CALL"],
+            "Strike": [190, 185, 200, 195, 180, 205],
+            "Expiry": ["7D", "14D", "30D", "7D", "45D", "60D"],
+            "Premium": ["1.2M", "840K", "2.4M", "690K", "1.1M", "760K"],
+            "Sentiment": ["Bullish", "Hedge", "Bullish", "Speculative", "Bearish", "Upside"],
+        }
+    )
+
+
+def get_options_ai_conclusion(ticker: str = DEFAULT_TICKER) -> str:
+    """Mock AI-generated options interpretation."""
+    # TODO: Connect options surface analytics to AI narrative generation
+    return (
+        f"**AI Options Interpretation (Placeholder)** — {ticker} options activity suggests a balanced but "
+        "slightly constructive setup. Mock open interest is concentrated near the spot-adjacent strikes, "
+        "while implied volatility remains mid-range versus its historical band. Dealer positioning appears "
+        "stabilizing in this placeholder view. This is synthetic content only and not investment advice."
+    )
+
+
 def get_watchlist() -> pd.DataFrame:
     """Default mock watchlist."""
     rows = []
@@ -307,8 +424,8 @@ def get_watchlist() -> pd.DataFrame:
         rows.append(
             {
                 "Ticker": t,
-                "Price": q["price"],
-                "Change %": q["change_pct"],
+                "Price": round(q["price"], 2),
+                "Change %": round(q["change_pct"], 2),
                 "Sector": q["sector"],
                 "Alert": "—",
             }
@@ -321,8 +438,8 @@ def get_market_overview() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Index": ["S&P 500", "NASDAQ", "DOW", "Russell 2000", "VIX"],
-            "Value": [5234.18, 16452.33, 39127.45, 2048.12, 14.82],
-            "Change %": [0.42, 0.68, 0.21, -0.15, -2.31],
+            "Value": [5234.2, 16452.3, 39127.5, 2048.1, 14.8],
+            "Change %": [0.4, 0.7, 0.2, -0.2, -2.3],
         }
     )
 
@@ -332,7 +449,7 @@ def get_top_movers() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "Ticker": ["NVDA", "AMD", "TSLA", "INTC", "BA"],
-            "Change %": [4.82, 3.15, 2.88, -2.41, -1.92],
+            "Change %": [4.8, 3.2, 2.9, -2.4, -1.9],
             "Volume": ["85.2M", "62.1M", "98.4M", "45.3M", "12.8M"],
         }
     )

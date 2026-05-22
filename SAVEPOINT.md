@@ -1,14 +1,15 @@
 # Savepoint — May 22, 2026
 
-Pause here. Resume from this UI milestone.
+Pause here. Resume from this milestone.
 
 ## Included in this version
 
-- Streamlit app with 7 sections + submenus (mock data only)
-- **Executive light theme** (navy `#1e3a5f`, gold `#c9a227`, light cards)
-- Wordmark in **sidebar only** (no duplicate header logo)
-- Light Plotly charts, KPI cards, modular `pages/` / `components/` layout
-- Assets: `assets/wordmark.png`, `assets/logo.png` (+ resized variants)
+- **UI:** Executive light theme, sidebar branding, 8 main sections + submenus
+- **Options Intelligence:** Mock institutional dashboards (chain, OI, IV, gamma, max pain, flow, AI)
+- **Architecture:** `ui/`, `services/`, `analytics/`, `ai/`, `models/`, `data/`
+- **Alpha Vantage Phase A:** Live quotes, daily history, index overview via ETF proxies (`SPY`, `QQQ`, `DIA`, `IWM`, `VXX`) with mock fallback
+- **Formatting:** Prices and percentages shown with **2 decimal places**
+- **Secrets:** API key via `.env` (`ALPHA_VANTAGE_API_KEY`) — never commit `.env`
 
 ## Run later
 
@@ -20,18 +21,11 @@ streamlit run stock_app.py
 
 Open http://localhost:8501/ — keep the terminal open while using the app.
 
-## Git checkpoint (run once in Terminal)
-
-```bash
-cd ~/Documents/StockInsightPro
-git init
-git add -A
-git commit -m "StockInsightPro UI: executive theme, sidebar wordmark, mock dashboard"
-```
+If live data does not appear, confirm `.env` exists in this folder and restart Streamlit.
 
 ## Next session ideas
 
-- Live market data API
-- Real technical indicators
-- UI polish (typography, spacing)
-- Report export
+- Alpha Vantage Phase B (fundamentals, news)
+- Real technical indicators from price history
+- Options provider (Polygon / Tradier, etc.)
+- Report export and watchlist persistence

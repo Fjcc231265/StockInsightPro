@@ -6,7 +6,7 @@ from typing import Optional
 
 import streamlit as st
 
-from utils.helpers import change_color_class, format_currency, format_percent
+from utils.helpers import change_color_class, format_currency, format_large_number, format_percent
 
 
 def render_metric_card(
@@ -43,7 +43,7 @@ def render_quote_cards(quote: dict) -> None:
             delta_value=quote["change_pct"],
         )
     with cols[2]:
-        render_metric_card("Volume", f"{quote['volume']:,}", delta_value=0)
+        render_metric_card("Volume", format_large_number(quote["volume"]), delta_value=0)
     with cols[3]:
         render_metric_card("Sector", quote["sector"], delta_value=0)
 
