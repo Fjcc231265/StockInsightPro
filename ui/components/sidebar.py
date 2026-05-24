@@ -9,6 +9,7 @@ import streamlit as st
 from services.market_data_service import get_available_tickers, get_market_data_status
 from utils.branding import LOGO_SIDEBAR, logo_as_base64, logo_exists
 from utils.constants import APP_NAME, DEFAULT_TICKER, MAIN_SECTIONS, SUBMENUS
+from utils.helpers import normalize_ticker
 
 
 def _render_sidebar_brand() -> None:
@@ -35,6 +36,7 @@ def init_session_state() -> None:
         "main_section": "Home Dashboard",
         "submenu": None,
         "selected_ticker": DEFAULT_TICKER,
+        "custom_ticker": "",
         "watchlist": ["AAPL", "MSFT", "NVDA", "GOOGL"],
     }
     for key, value in defaults.items():
@@ -58,14 +60,34 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
         st.divider()
 
         # Global ticker selector (available on all pages)
-        st.session_state.selected_ticker = st.selectbox(
-            "Symbol",
+        st.markdown("**Symbol**")
+        custom_symbol = st.text_input(
+            "Custom symbol",
+            value=st.session_state.get("custom_ticker", ""),
+            placeholder="e.g. DCTH, PLTR, SMCI",
+            key="custom_ticker_input",
+            label_visibility="collapsed",
+        )
+        custom_symbol = normalize_ticker(custom_symbol)
+
+        suggested_symbol = st.selectbox(
+            "Suggested symbols",
             options=available_tickers,
             index=available_tickers.index(st.session_state.selected_ticker)
             if st.session_state.selected_ticker in available_tickers
             else 0,
             key="sidebar_ticker",
+            label_visibility="collapsed",
         )
+
+        if custom_symbol:
+            st.session_state.selected_ticker = custom_symbol
+            st.session_state.custom_ticker = custom_symbol
+        else:
+            st.session_state.selected_ticker = suggested_symbol
+            st.session_state.custom_ticker = ""
+
+        st.caption(f"Active: **{st.session_state.selected_ticker}**")
 
         st.divider()
         st.markdown("**Navigation**")

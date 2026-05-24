@@ -15,6 +15,12 @@ Pause here. Resume from this milestone.
   - Weekly/monthly from resampled adjusted daily OHLC (split-safe)
   - Trading-bar axis (no calendar gaps) — aligned with broker-style charts
 - **Written technical analysis (English):** Daily + weekly + monthly narrative under Technical Analysis → Price chart
+- **Custom ticker input:** Sidebar accepts arbitrary symbols (for example `DCTH`) in addition to suggested tickers
+- **Fundamental Analysis Phase A:**
+  - Alpha Vantage P&L / Income Statement, Balance Sheet, and Cash Flow Statement
+  - Annual / Quarterly statement selectors
+  - Period-over-period percentage variation for each statement line item
+  - P&L margin analysis: gross, operating, EBITDA, pre-tax, and net margins
 - **UI:** Data source captions on home/sidebar/footer; 2-decimal formatting
 
 ## Run later
@@ -36,7 +42,7 @@ After saving, latest commit on `main` should reflect this session. Run `git log 
 ## Next session ideas
 
 - Alpha Vantage index entitlement (real indices vs ETF proxy)
-- Phase B: fundamentals + news/sentiment
+- Phase B: news/sentiment and richer fundamental analytics
 - Optional: OpenAI/LLM for richer written analysis from chart snapshots
 - Options provider (Polygon / Tradier)
 - Portfolio persistence, report export

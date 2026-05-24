@@ -92,6 +92,16 @@ def _parse_float(value: str | float | int, default: float = 0.0) -> float:
         return default
 
 
+def _parse_optional_float(value: str | float | int | None) -> float | None:
+    """Parse optional Alpha Vantage numeric fields."""
+    if value in (None, "", "None", "none", "null"):
+        return None
+    try:
+        return float(str(value).replace("%", "").replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
 def get_quote(ticker: str) -> dict:
     """Return normalized real-time/delayed quote data."""
     data = _request({"function": "GLOBAL_QUOTE", "symbol": ticker})
@@ -322,3 +332,96 @@ def _normalize_movers(rows: list[dict[str, Any]], move_type: str) -> pd.DataFram
             }
         )
     return pd.DataFrame(normalized_rows)
+
+
+FINANCIAL_STATEMENT_CONFIG = {
+    "income": {
+        "function": "INCOME_STATEMENT",
+        "title": "Income Statement",
+        "rows": [
+            ("totalRevenue", "Revenue", "money"),
+            ("costOfRevenue", "Cost of Revenue", "money"),
+            ("grossProfit", "Gross Profit", "money"),
+            ("operatingExpenses", "Operating Expenses", "money"),
+            ("operatingIncome", "Operating Income", "money"),
+            ("ebit", "EBIT", "money"),
+            ("ebitda", "EBITDA", "money"),
+            ("incomeBeforeTax", "Income Before Tax", "money"),
+            ("incomeTaxExpense", "Income Tax Expense", "money"),
+            ("netIncome", "Net Income", "money"),
+        ],
+    },
+    "balance": {
+        "function": "BALANCE_SHEET",
+        "title": "Balance Sheet",
+        "rows": [
+            ("totalAssets", "Total Assets", "money"),
+            ("totalCurrentAssets", "Current Assets", "money"),
+            ("cashAndCashEquivalentsAtCarryingValue", "Cash & Equivalents", "money"),
+            ("inventory", "Inventory", "money"),
+            ("totalLiabilities", "Total Liabilities", "money"),
+            ("totalCurrentLiabilities", "Current Liabilities", "money"),
+            ("shortLongTermDebtTotal", "Total Debt", "money"),
+            ("totalShareholderEquity", "Shareholders' Equity", "money"),
+            ("commonStockSharesOutstanding", "Shares Outstanding", "number"),
+        ],
+    },
+    "cashflow": {
+        "function": "CASH_FLOW",
+        "title": "Cash Flow Statement",
+        "rows": [
+            ("operatingCashflow", "Operating Cash Flow", "money"),
+            ("capitalExpenditures", "Capital Expenditures", "money"),
+            ("cashflowFromInvestment", "Investing Cash Flow", "money"),
+            ("cashflowFromFinancing", "Financing Cash Flow", "money"),
+            ("dividendPayout", "Dividends Paid", "money"),
+            ("proceedsFromRepurchaseOfEquity", "Share Repurchases", "money"),
+            ("changeInCashAndCashEquivalents", "Change in Cash", "money"),
+        ],
+    },
+}
+
+
+def get_financial_statement(statement_type: str, ticker: str, period: str = "Annual") -> pd.DataFrame:
+    """Return a normalized financial statement from Alpha Vantage fundamentals."""
+    config = FINANCIAL_STATEMENT_CONFIG.get(statement_type)
+    if not config:
+        raise AlphaVantageError(f"Unsupported financial statement: {statement_type}.")
+
+    data = _request({"function": config["function"], "symbol": ticker})
+    report_key = "annualReports" if period.lower() == "annual" else "quarterlyReports"
+    reports = data.get(report_key, [])
+    if not reports:
+        raise AlphaVantageError(f"No {period.lower()} {config['title'].lower()} returned for {ticker}.")
+
+    selected_reports = reports[:5 if period.lower() == "annual" else 8]
+    rows = []
+    for field, label, value_type in config["rows"]:
+        row = {"Metric": label}
+        for report in selected_reports:
+            period_label = _financial_period_label(report, period)
+            row[period_label] = _format_financial_statement_value(report.get(field), value_type)
+        rows.append(row)
+
+    statement = pd.DataFrame(rows)
+    statement.attrs["source"] = f"Alpha Vantage {config['title']} ({period})"
+    statement.attrs["currency"] = selected_reports[0].get("reportedCurrency", "USD")
+    return statement
+
+
+def _financial_period_label(report: dict[str, Any], period: str) -> str:
+    """Return a compact fiscal period label."""
+    fiscal_date = pd.to_datetime(report.get("fiscalDateEnding"))
+    if period.lower() == "annual":
+        return f"FY {fiscal_date.year}"
+    return f"{fiscal_date.year} Q{fiscal_date.quarter}"
+
+
+def _format_financial_statement_value(value: str | float | int | None, value_type: str) -> str:
+    """Format financial statement values for compact display."""
+    parsed = _parse_optional_float(value)
+    if parsed is None:
+        return "-"
+    if value_type == "number":
+        return format_large_number(parsed)
+    return f"{parsed / 1_000_000:,.2f}"

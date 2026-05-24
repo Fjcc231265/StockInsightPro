@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import re
+
+
+def normalize_ticker(symbol: str) -> str:
+    """Normalize a user-entered ticker symbol."""
+    return re.sub(r"[^A-Z0-9.\-]", "", symbol.strip().upper())
+
 
 def format_currency(value: float, decimals: int = 2) -> str:
     """Format a number as USD currency."""
