@@ -135,9 +135,20 @@ def get_company_overview(ticker: str) -> dict:
     return {
         "ticker": data.get("Symbol", ticker),
         "name": data.get("Name") or ticker,
+        "description": data.get("Description") or "No company description available.",
+        "exchange": data.get("Exchange") or "Unknown",
+        "currency": data.get("Currency") or "USD",
+        "country": data.get("Country") or "Unknown",
         "sector": data.get("Sector") or "Unknown",
         "industry": data.get("Industry") or "Unknown",
         "market_cap": round(market_cap, 2),
+        "pe_ratio": _parse_optional_float(data.get("PERatio")),
+        "peg_ratio": _parse_optional_float(data.get("PEGRatio")),
+        "beta": _parse_optional_float(data.get("Beta")),
+        "dividend_yield": _parse_optional_float(data.get("DividendYield")),
+        "profit_margin": _parse_optional_float(data.get("ProfitMargin")),
+        "52_week_high": _parse_optional_float(data.get("52WeekHigh")),
+        "52_week_low": _parse_optional_float(data.get("52WeekLow")),
     }
 
 
@@ -332,6 +343,71 @@ def _normalize_movers(rows: list[dict[str, Any]], move_type: str) -> pd.DataFram
             }
         )
     return pd.DataFrame(normalized_rows)
+
+
+def get_news_sentiment(ticker: str, limit: int = 8) -> pd.DataFrame:
+    """Return recent ticker news with normalized sentiment labels."""
+    data = _request(
+        {
+            "function": "NEWS_SENTIMENT",
+            "tickers": ticker,
+            "sort": "LATEST",
+            "limit": str(limit),
+        }
+    )
+    feed = data.get("feed", [])
+    if not feed:
+        raise AlphaVantageError(f"No news returned for {ticker}.")
+
+    rows = []
+    for item in feed[:limit]:
+        label, score = _ticker_news_sentiment(item, ticker)
+        rows.append(
+            {
+                "Published": _format_news_timestamp(item.get("time_published")),
+                "Headline": item.get("title", "Untitled"),
+                "Source": item.get("source", "Unknown"),
+                "Sentiment": label,
+                "Score": round(score, 3) if score is not None else None,
+                "URL": item.get("url", ""),
+            }
+        )
+
+    news = pd.DataFrame(rows)
+    news.attrs["source"] = "Alpha Vantage News Sentiment"
+    return news
+
+
+def _ticker_news_sentiment(item: dict[str, Any], ticker: str) -> tuple[str, float | None]:
+    """Return ticker-specific sentiment when available, otherwise overall sentiment."""
+    ticker = ticker.upper()
+    for sentiment in item.get("ticker_sentiment", []):
+        if sentiment.get("ticker", "").upper() == ticker:
+            score = _parse_optional_float(sentiment.get("ticker_sentiment_score"))
+            return _normalize_sentiment_label(sentiment.get("ticker_sentiment_label")), score
+
+    score = _parse_optional_float(item.get("overall_sentiment_score"))
+    return _normalize_sentiment_label(item.get("overall_sentiment_label")), score
+
+
+def _normalize_sentiment_label(label: str | None) -> str:
+    """Map Alpha Vantage labels to simple UI sentiment states."""
+    normalized = (label or "Neutral").lower()
+    if "bullish" in normalized:
+        return "Positive"
+    if "bearish" in normalized:
+        return "Negative"
+    return "Neutral"
+
+
+def _format_news_timestamp(raw_timestamp: str | None) -> str:
+    """Format Alpha Vantage news timestamps."""
+    if not raw_timestamp:
+        return "Unknown"
+    try:
+        return pd.to_datetime(raw_timestamp, format="%Y%m%dT%H%M%S").strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return raw_timestamp
 
 
 FINANCIAL_STATEMENT_CONFIG = {

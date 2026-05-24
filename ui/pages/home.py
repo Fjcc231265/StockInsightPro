@@ -12,6 +12,7 @@ from services.market_data_service import (
     get_quote_summary,
     get_top_movers_by_direction,
 )
+from services.news_data_service import get_news_items
 from utils.helpers import format_large_number, format_percent
 
 
@@ -65,9 +66,98 @@ def _render_symbol_panel(ticker: str, quote: dict) -> None:
     with c3:
         st.metric("Mkt Cap (B)", f"${quote['market_cap']:.2f}B")
 
+    _render_company_overview(quote)
+    _render_recent_news(ticker)
+
     prices = get_price_history(ticker)
     st.plotly_chart(price_line_chart(prices, ticker), use_container_width=True)
-    # TODO: Add watchlist quick-add and recent news teaser
+
+
+def _render_company_overview(quote: dict) -> None:
+    """Render company profile details above the chart."""
+    st.markdown("**Company Overview**")
+    overview_cols = st.columns(4)
+    with overview_cols[0]:
+        st.caption("Exchange")
+        st.write(f"**{quote.get('exchange', 'Unknown')}**")
+    with overview_cols[1]:
+        st.caption("Industry")
+        st.write(f"**{quote.get('industry', 'Unknown')}**")
+    with overview_cols[2]:
+        st.caption("P/E")
+        st.write(f"**{_format_optional_number(quote.get('pe_ratio'))}**")
+    with overview_cols[3]:
+        st.caption("Beta")
+        st.write(f"**{_format_optional_number(quote.get('beta'))}**")
+
+    extra_cols = st.columns(4)
+    with extra_cols[0]:
+        st.caption("52W High")
+        st.write(f"**{_format_optional_currency(quote.get('52_week_high'))}**")
+    with extra_cols[1]:
+        st.caption("52W Low")
+        st.write(f"**{_format_optional_currency(quote.get('52_week_low'))}**")
+    with extra_cols[2]:
+        st.caption("Dividend Yield")
+        st.write(f"**{_format_optional_ratio_percent(quote.get('dividend_yield'))}**")
+    with extra_cols[3]:
+        st.caption("Profit Margin")
+        st.write(f"**{_format_optional_ratio_percent(quote.get('profit_margin'))}**")
+
+    st.write(quote.get("description", "No company description available."))
+
+
+def _render_recent_news(ticker: str) -> None:
+    """Render recent news with color-coded sentiment badges."""
+    if not st.toggle("Show recent news", value=False, key=f"home_recent_news_{ticker}"):
+        return
+
+    news = get_news_items(ticker, limit=6)
+    st.caption(f"News source: {news.attrs.get('source', 'Unknown')}")
+    for _, row in news.iterrows():
+        sentiment = row.get("Sentiment", "Neutral")
+        badge_color = _sentiment_color(sentiment)
+        headline = row.get("Headline", "Untitled")
+        url = row.get("URL", "")
+        headline_html = f'<a href="{url}" target="_blank">{headline}</a>' if url else headline
+        st.markdown(
+            f"""
+            <div style="border:1px solid #d8dee6;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#ffffff;">
+                <span style="display:inline-block;background:{badge_color};color:white;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;">
+                    {sentiment}
+                </span>
+                <span style="font-size:12px;color:#6b7c93;margin-left:8px;">
+                    {row.get('Published', row.get('Date', 'Unknown'))} · {row.get('Source', 'Unknown')}
+                </span>
+                <div style="margin-top:6px;font-weight:600;">{headline_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _sentiment_color(sentiment: str) -> str:
+    """Return badge color for normalized sentiment."""
+    if sentiment == "Positive":
+        return "#1a7f4e"
+    if sentiment == "Negative":
+        return "#c0392b"
+    return "#c9a227"
+
+
+def _format_optional_number(value: object) -> str:
+    """Format optional numeric values."""
+    return "-" if value is None else f"{float(value):.2f}"
+
+
+def _format_optional_currency(value: object) -> str:
+    """Format optional currency values."""
+    return "-" if value is None else f"${float(value):.2f}"
+
+
+def _format_optional_ratio_percent(value: object) -> str:
+    """Format optional ratio values from Alpha Vantage as percentages."""
+    return "-" if value is None else f"{float(value) * 100:.2f}%"
 
 
 def _render_movers_panel() -> None:

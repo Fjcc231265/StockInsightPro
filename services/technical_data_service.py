@@ -65,3 +65,11 @@ def get_written_technical_analysis(ticker: str) -> str:
     weekly = get_price_history(ticker, 156, timeframe="Weekly")
     monthly = get_price_history(ticker, 120, timeframe="Monthly")
     return summarize_technical_charts(ticker, daily=daily, weekly=weekly, monthly=monthly)
+
+
+def get_technical_trend_label(analysis: str) -> str:
+    """Extract the primary technical trend label from written analysis."""
+    marker = "shows a **"
+    if marker not in analysis:
+        return "Unknown"
+    return analysis.split(marker, 1)[1].split("**", 1)[0]

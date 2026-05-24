@@ -51,11 +51,23 @@ def get_quote_summary(ticker: str) -> dict:
     except alpha_vantage_provider.AlphaVantageError:
         overview = {
             "name": ticker,
+            "description": "Company overview unavailable from Alpha Vantage right now.",
+            "exchange": "Unknown",
+            "currency": "USD",
+            "country": "Unknown",
             "sector": mock_data.SECTOR_LABELS.get(
                 ticker,
                 "ETF / Index Proxy" if ticker in INDEX_PROXY_TICKERS else "Unknown",
             ),
+            "industry": "Unknown",
             "market_cap": fallback["market_cap"],
+            "pe_ratio": None,
+            "peg_ratio": None,
+            "beta": None,
+            "dividend_yield": None,
+            "profit_margin": None,
+            "52_week_high": None,
+            "52_week_low": None,
         }
 
     return {

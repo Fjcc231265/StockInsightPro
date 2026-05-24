@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from ai.market_interpreter import summarize_fundamental_health
 from data import mock_data
 from data.providers import alpha_vantage_provider
 
@@ -68,6 +69,26 @@ def get_income_statement_margins(statement: pd.DataFrame) -> pd.DataFrame:
         rows.append(row)
 
     return pd.DataFrame(rows)
+
+
+def get_written_fundamental_analysis(ticker: str) -> str:
+    """Return a professional financial health analysis."""
+    return summarize_fundamental_health(
+        ticker=ticker,
+        income_annual=get_financial_statement("income", ticker, "Annual"),
+        income_quarterly=get_financial_statement("income", ticker, "Quarterly"),
+        balance_annual=get_financial_statement("balance", ticker, "Annual"),
+        balance_quarterly=get_financial_statement("balance", ticker, "Quarterly"),
+        cashflow_annual=get_financial_statement("cashflow", ticker, "Annual"),
+    )
+
+
+def get_fundamental_health_label(analysis: str) -> str:
+    """Extract the overall health label from the written analysis."""
+    marker = "Overall fundamental health: **"
+    if marker not in analysis:
+        return "Unknown"
+    return analysis.split(marker, 1)[1].split("**", 1)[0]
 
 
 def _normalize_statement_table(statement: pd.DataFrame) -> pd.DataFrame:

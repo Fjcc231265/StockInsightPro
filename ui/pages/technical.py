@@ -16,6 +16,7 @@ from services.technical_data_service import (
     get_moving_averages_df,
     get_rsi_series,
     get_support_resistance,
+    get_technical_trend_label,
     get_volume_analysis,
     get_written_technical_analysis,
 )
@@ -52,8 +53,7 @@ def render(submenu: str) -> None:
 def _price_chart(ticker: str) -> None:
     """Price chart submenu."""
     _render_timeframe_price_chart(ticker, "price_chart")
-    with st.expander("Written technical analysis", expanded=False):
-        st.markdown(get_written_technical_analysis(ticker))
+    _render_written_technical_analysis(ticker)
     render_todo_callout("Add drawing tools and saved chart layouts.")
 
 
@@ -122,3 +122,49 @@ def _render_timeframe_price_chart(ticker: str, key_suffix: str) -> None:
     prices = get_price_history(ticker, TIMEFRAME_PERIODS[timeframe], timeframe=timeframe)
     st.caption(f"Chart source: {prices.attrs.get('source', 'Unknown')}")
     st.plotly_chart(price_line_chart(prices, ticker), use_container_width=True)
+
+
+def _render_technical_trend_badge(trend_label: str) -> None:
+    """Render color-coded primary technical trend."""
+    color = _technical_trend_color(trend_label)
+    display_label = {
+        "bullish": "Upward / Bullish",
+        "mixed / sideways": "Sideways / Mixed",
+        "bearish": "Downward / Bearish",
+    }.get(trend_label, trend_label.title())
+    st.markdown(
+        f"""
+        <div style="margin-bottom:12px;">
+            <span style="display:inline-block;background:{color};color:white;border-radius:999px;padding:6px 14px;font-size:14px;font-weight:700;">
+                Technical Trend: {display_label}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _technical_trend_color(trend_label: str) -> str:
+    """Return badge color for trend label."""
+    if trend_label == "bullish":
+        return "#1a7f4e"
+    if trend_label == "bearish":
+        return "#c0392b"
+    if trend_label == "mixed / sideways":
+        return "#c9a227"
+    return "#5a6a7a"
+
+
+def _render_written_technical_analysis(ticker: str) -> None:
+    """Render on-demand written technical assessment."""
+    analysis_key = f"show_technical_analysis_{ticker}"
+    if st.button("Generate technical analysis", key=f"technical_analysis_button_{ticker}", type="primary"):
+        st.session_state[analysis_key] = True
+
+    if st.session_state.get(analysis_key):
+        with st.expander("Professional technical analysis", expanded=True):
+            with st.spinner("Analyzing technical charts..."):
+                analysis = get_written_technical_analysis(ticker)
+                trend_label = get_technical_trend_label(analysis)
+                _render_technical_trend_badge(trend_label)
+                st.markdown(analysis)

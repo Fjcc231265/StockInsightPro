@@ -7,11 +7,13 @@ from ui.components.page_router import render_ticker_submenu_page
 from services.fundamental_data_service import (
     get_debt_liquidity,
     get_financial_statement,
+    get_fundamental_health_label,
     get_growth_metrics,
     get_income_statement_margins,
     get_profitability_metrics,
     get_statement_variation,
     get_valuation_ratios,
+    get_written_fundamental_analysis,
 )
 
 
@@ -74,6 +76,8 @@ def _statement(stmt_type: str, ticker: str) -> None:
             st.caption("Margins are calculated as a percentage of revenue for each period.")
             st.dataframe(margins, use_container_width=True, hide_index=True)
 
+    _render_financial_health_analysis(ticker)
+
     render_todo_callout(
         f"Add common-size chart visualizations and export for {label_map[selected_stmt_type].lower()}."
     )
@@ -86,6 +90,47 @@ def _statement_label_map() -> dict[str, str]:
         "balance": "Balance Sheet",
         "cashflow": "Cash Flow Statement",
     }
+
+
+def _render_financial_health_analysis(ticker: str) -> None:
+    """Render on-demand written financial health assessment."""
+    analysis_key = f"show_fundamental_health_analysis_{ticker}"
+    if st.button("Generate financial health analysis", key=f"fundamental_health_button_{ticker}", type="primary"):
+        st.session_state[analysis_key] = True
+
+    if st.session_state.get(analysis_key):
+        with st.expander("Professional financial health analysis", expanded=True):
+            with st.spinner("Analyzing financial statements..."):
+                analysis = get_written_fundamental_analysis(ticker)
+                health_label = get_fundamental_health_label(analysis)
+                _render_health_badge(health_label)
+                st.markdown(analysis)
+
+
+def _render_health_badge(health_label: str) -> None:
+    """Render color-coded overall fundamental health."""
+    color = _health_color(health_label)
+    st.markdown(
+        f"""
+        <div style="margin-bottom:12px;">
+            <span style="display:inline-block;background:{color};color:white;border-radius:999px;padding:6px 14px;font-size:14px;font-weight:700;">
+                Overall Fundamental Health: {health_label}
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _health_color(health_label: str) -> str:
+    """Return badge color for health label."""
+    if health_label == "Strong":
+        return "#1a7f4e"
+    if health_label.startswith("Adequate"):
+        return "#c9a227"
+    if health_label.startswith("Weak"):
+        return "#c0392b"
+    return "#5a6a7a"
 
 
 def _valuation(ticker: str) -> None:

@@ -59,36 +59,7 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
         st.caption("Stock Market Analysis Platform")
         st.divider()
 
-        # Global ticker selector (available on all pages)
-        st.markdown("**Symbol**")
-        custom_symbol = st.text_input(
-            "Custom symbol",
-            value=st.session_state.get("custom_ticker", ""),
-            placeholder="e.g. DCTH, PLTR, SMCI",
-            key="custom_ticker_input",
-            label_visibility="collapsed",
-        )
-        custom_symbol = normalize_ticker(custom_symbol)
-
-        suggested_symbol = st.selectbox(
-            "Suggested symbols",
-            options=available_tickers,
-            index=available_tickers.index(st.session_state.selected_ticker)
-            if st.session_state.selected_ticker in available_tickers
-            else 0,
-            key="sidebar_ticker",
-            label_visibility="collapsed",
-        )
-
-        if custom_symbol:
-            st.session_state.selected_ticker = custom_symbol
-            st.session_state.custom_ticker = custom_symbol
-        else:
-            st.session_state.selected_ticker = suggested_symbol
-            st.session_state.custom_ticker = ""
-
-        st.caption(f"Active: **{st.session_state.selected_ticker}**")
-
+        symbol_container = st.container()
         st.divider()
         st.markdown("**Navigation**")
 
@@ -120,8 +91,45 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
             )
             st.session_state.submenu = submenu
 
+        with symbol_container:
+            _render_symbol_selector(available_tickers, main_section)
+
         st.divider()
         st.caption("v0.1 — UI Preview")
         st.caption(f"Market data: {get_market_data_status()}")
 
     return main_section, submenu
+
+
+def _render_symbol_selector(available_tickers: list[str], main_section: str) -> None:
+    """Render custom ticker input and context-specific suggested symbols."""
+    st.markdown("**Symbol**")
+    custom_symbol = st.text_input(
+        "Custom symbol",
+        value=st.session_state.get("custom_ticker", ""),
+        placeholder="e.g. DCTH, PLTR, SMCI",
+        key="custom_ticker_input",
+        label_visibility="collapsed",
+    )
+    custom_symbol = normalize_ticker(custom_symbol)
+
+    if custom_symbol:
+        st.session_state.selected_ticker = custom_symbol
+        st.session_state.custom_ticker = custom_symbol
+    else:
+        st.session_state.custom_ticker = ""
+        if main_section == "Home Dashboard":
+            suggested_symbol = st.selectbox(
+                "Suggested symbols",
+                options=available_tickers,
+                index=available_tickers.index(st.session_state.selected_ticker)
+                if st.session_state.selected_ticker in available_tickers
+                else 0,
+                key="sidebar_ticker",
+                label_visibility="collapsed",
+            )
+            st.session_state.selected_ticker = suggested_symbol
+
+    st.caption(f"Active: **{st.session_state.selected_ticker}**")
+    if main_section != "Home Dashboard" and not custom_symbol:
+        st.caption("Suggested symbols are available on the Home Dashboard.")
