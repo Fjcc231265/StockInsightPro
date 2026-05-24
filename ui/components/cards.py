@@ -32,6 +32,11 @@ def render_metric_card(
 
 def render_quote_cards(quote: dict) -> None:
     """Render standard quote summary KPI row."""
+    if quote.get("price_source", "").startswith("Mock"):
+        st.warning("Live quote unavailable right now. Showing mock fallback values for price/change/volume.")
+    else:
+        st.caption(f"Price source: {quote.get('price_source', 'Unknown')}")
+
     cols = st.columns(4)
     with cols[0]:
         render_metric_card("Last Price", format_currency(quote["price"]), delta_value=0)

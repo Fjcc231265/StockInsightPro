@@ -21,6 +21,7 @@ from ui.components.layout import render_app_header
 from ui.components.sidebar import render_sidebar
 from ui.components.styles import get_custom_css
 from ui.pages import fundamental, home, news, options_intelligence, portfolio, reports, settings, technical
+from services.market_data_service import get_market_data_status
 from utils.branding import LOGO_SIDEBAR
 from utils.constants import APP_NAME
 
@@ -66,6 +67,6 @@ else:
 # ── Footer ──────────────────────────────────────────────────────────────────────
 st.divider()
 st.caption(
-    f"{APP_NAME} v0.1 · Mock data only · Not financial advice · "
+    f"{APP_NAME} v0.1 · Market data: {get_market_data_status()} · Not financial advice · "
     f"Active: {main_section}" + (f" → {submenu}" if submenu else "")
 )

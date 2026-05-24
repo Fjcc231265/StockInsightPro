@@ -4,11 +4,9 @@ import streamlit as st
 
 from ui.components.cards import render_todo_callout
 from ui.components.charts import (
-    candlestick_chart,
     macd_chart,
     price_line_chart,
     rsi_chart,
-    volume_bar_chart,
 )
 from ui.components.page_router import render_ticker_submenu_page
 from services.market_data_service import get_price_history
@@ -19,7 +17,15 @@ from services.technical_data_service import (
     get_rsi_series,
     get_support_resistance,
     get_volume_analysis,
+    get_written_technical_analysis,
 )
+
+TIMEFRAME_PERIODS = {
+    "Daily": 180,
+    "Weekly": 156,
+    "Monthly": 120,
+    "Hourly": 240,
+}
 
 
 def render(submenu: str) -> None:
@@ -45,24 +51,21 @@ def render(submenu: str) -> None:
 
 def _price_chart(ticker: str) -> None:
     """Price chart submenu."""
-    prices = get_price_history(ticker)
-    st.plotly_chart(price_line_chart(prices, ticker), use_container_width=True)
-    st.plotly_chart(candlestick_chart(prices, ticker), use_container_width=True)
-    render_todo_callout("Add chart timeframe selector, overlays, and drawing tools.")
+    _render_timeframe_price_chart(ticker, "price_chart")
+    with st.expander("Written technical analysis", expanded=False):
+        st.markdown(get_written_technical_analysis(ticker))
+    render_todo_callout("Add drawing tools and saved chart layouts.")
 
 
 def _moving_averages(ticker: str) -> None:
     """Moving averages table and chart overlay placeholder."""
-    prices = get_price_history(ticker)
     ma_df = get_moving_averages_df(ticker)
     col1, col2 = st.columns([1, 2])
     with col1:
         st.dataframe(ma_df, use_container_width=True, hide_index=True)
     with col2:
-        fig = price_line_chart(prices, ticker)
-        # TODO: Overlay SMA/EMA lines on chart
-        st.plotly_chart(fig, use_container_width=True)
-    render_todo_callout("Calculate and plot SMA 20/50/200 and EMA 12/26 from live data.")
+        _render_timeframe_price_chart(ticker, "moving_averages")
+    render_todo_callout("Expand the moving average table with SMA 50/200 and EMA 12/26.")
 
 
 def _rsi(ticker: str) -> None:
@@ -85,8 +88,7 @@ def _support_resistance(ticker: str) -> None:
     """Support and resistance levels table."""
     levels = get_support_resistance(ticker)
     st.dataframe(levels, use_container_width=True, hide_index=True)
-    prices = get_price_history(ticker, 30)
-    st.plotly_chart(price_line_chart(prices, ticker), use_container_width=True)
+    _render_timeframe_price_chart(ticker, "support_resistance")
     render_todo_callout("Auto-detect S/R from swing highs/lows and volume nodes.")
 
 
@@ -97,8 +99,7 @@ def _volume_analysis(ticker: str) -> None:
     with col1:
         st.dataframe(vol_stats, use_container_width=True, hide_index=True)
     with col2:
-        prices = get_price_history(ticker)
-        st.plotly_chart(volume_bar_chart(prices, ticker), use_container_width=True)
+        _render_timeframe_price_chart(ticker, "volume_analysis")
     render_todo_callout("Add OBV, VWAP, and relative volume indicators.")
 
 
@@ -106,6 +107,18 @@ def _candlestick_patterns(ticker: str) -> None:
     """Detected candlestick patterns table."""
     patterns = get_candlestick_patterns()
     st.dataframe(patterns, use_container_width=True, hide_index=True)
-    prices = get_price_history(ticker)
-    st.plotly_chart(candlestick_chart(prices, ticker), use_container_width=True)
+    _render_timeframe_price_chart(ticker, "candlestick_patterns")
     render_todo_callout("Build pattern recognition engine (engulfing, doji, stars, etc.).")
+
+
+def _render_timeframe_price_chart(ticker: str, key_suffix: str) -> None:
+    """Render the shared candlestick chart with an Alpha Vantage timeframe selector."""
+    timeframe = st.radio(
+        "Chart timeframe",
+        list(TIMEFRAME_PERIODS),
+        horizontal=True,
+        key=f"technical_timeframe_{key_suffix}",
+    )
+    prices = get_price_history(ticker, TIMEFRAME_PERIODS[timeframe], timeframe=timeframe)
+    st.caption(f"Chart source: {prices.attrs.get('source', 'Unknown')}")
+    st.plotly_chart(price_line_chart(prices, ticker), use_container_width=True)

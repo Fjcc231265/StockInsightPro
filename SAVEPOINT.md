@@ -1,15 +1,21 @@
-# Savepoint — May 22, 2026
+# Savepoint — May 24, 2026
 
 Pause here. Resume from this milestone.
 
 ## Included in this version
 
-- **UI:** Executive light theme, sidebar branding, 8 main sections + submenus
-- **Options Intelligence:** Mock institutional dashboards (chain, OI, IV, gamma, max pain, flow, AI)
-- **Architecture:** `ui/`, `services/`, `analytics/`, `ai/`, `models/`, `data/`
-- **Alpha Vantage Phase A:** Live quotes, daily history, index overview via ETF proxies (`SPY`, `QQQ`, `DIA`, `IWM`, `VXX`) with mock fallback
-- **Formatting:** Prices and percentages shown with **2 decimal places**
-- **Secrets:** API key via `.env` (`ALPHA_VANTAGE_API_KEY`) — never commit `.env`
+- **Alpha Vantage Phase A (expanded):**
+  - Live quotes (`GLOBAL_QUOTE`) + company overview (`OVERVIEW`) for name, sector, market cap
+  - Price source labels and mock fallback only when API fails
+  - Index dashboard: tries `INDEX_DATA` (SPX, COMP, DJI, RUT, VIX), falls back to ETF proxies with visible source
+  - Top 10 gainers / top 10 losers via `TOP_GAINERS_LOSERS` (compact volume K/M/B)
+- **Technical charts:**
+  - Candlesticks (green/red), MA20 (blue), MA40 (red), volume, RSI(9)
+  - Timeframes: Daily, Weekly, Monthly, Hourly (60min, regular hours only)
+  - Weekly/monthly from resampled adjusted daily OHLC (split-safe)
+  - Trading-bar axis (no calendar gaps) — aligned with broker-style charts
+- **Written technical analysis (English):** Daily + weekly + monthly narrative under Technical Analysis → Price chart
+- **UI:** Data source captions on home/sidebar/footer; 2-decimal formatting
 
 ## Run later
 
@@ -21,11 +27,16 @@ streamlit run stock_app.py
 
 Open http://localhost:8501/ — keep the terminal open while using the app.
 
-If live data does not appear, confirm `.env` exists in this folder and restart Streamlit.
+Ensure `.env` has `ALPHA_VANTAGE_API_KEY=<your_key>`. Restart Streamlit after changing the key.
+
+## Git checkpoint
+
+After saving, latest commit on `main` should reflect this session. Run `git log -1` to confirm.
 
 ## Next session ideas
 
-- Alpha Vantage Phase B (fundamentals, news)
-- Real technical indicators from price history
-- Options provider (Polygon / Tradier, etc.)
-- Report export and watchlist persistence
+- Alpha Vantage index entitlement (real indices vs ETF proxy)
+- Phase B: fundamentals + news/sentiment
+- Optional: OpenAI/LLM for richer written analysis from chart snapshots
+- Options provider (Polygon / Tradier)
+- Portfolio persistence, report export

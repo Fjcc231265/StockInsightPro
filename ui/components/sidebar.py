@@ -6,7 +6,7 @@ from typing import Optional, Tuple
 
 import streamlit as st
 
-from services.market_data_service import get_available_tickers
+from services.market_data_service import get_available_tickers, get_market_data_status
 from utils.branding import LOGO_SIDEBAR, logo_as_base64, logo_exists
 from utils.constants import APP_NAME, DEFAULT_TICKER, MAIN_SECTIONS, SUBMENUS
 
@@ -100,6 +100,6 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
 
         st.divider()
         st.caption("v0.1 — UI Preview")
-        st.caption("Mock data only")
+        st.caption(f"Market data: {get_market_data_status()}")
 
     return main_section, submenu

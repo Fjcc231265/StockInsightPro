@@ -27,31 +27,81 @@ def get_available_tickers() -> list[str]:
 
 def get_quote_summary(ticker: str) -> dict:
     """Return normalized quote summary."""
-    fallback = mock_data.get_quote_summary(ticker)
+    fallback = {
+        **mock_data.get_quote_summary(ticker),
+        "price_source": "Mock fallback",
+        "metadata_source": "Mock fallback",
+    }
     if not alpha_vantage_provider.is_configured():
-        return fallback
+        return {**fallback, "price_source": "Mock data", "metadata_source": "Mock data"}
 
     try:
-        quote = alpha_vantage_provider.get_quote(ticker)
+        quote = {
+            **alpha_vantage_provider.get_quote(ticker),
+            "price_source": "Alpha Vantage Global Quote",
+        }
     except alpha_vantage_provider.AlphaVantageError:
-        return fallback
+        quote = _quote_from_daily_history(ticker) or {**fallback, "name": ticker}
 
-    # Alpha Vantage quote does not include sector/market cap in GLOBAL_QUOTE.
+    try:
+        overview = {
+            **alpha_vantage_provider.get_company_overview(ticker),
+            "metadata_source": "Alpha Vantage Company Overview",
+        }
+    except alpha_vantage_provider.AlphaVantageError:
+        overview = {
+            "name": ticker,
+            "sector": mock_data.SECTOR_LABELS.get(
+                ticker,
+                "ETF / Index Proxy" if ticker in INDEX_PROXY_TICKERS else "Unknown",
+            ),
+            "market_cap": fallback["market_cap"],
+        }
+
     return {
         **fallback,
         **quote,
-        "sector": mock_data.SECTOR_LABELS.get(ticker, "ETF / Index Proxy" if ticker in INDEX_PROXY_TICKERS else "Unknown"),
+        **overview,
     }
 
 
-def get_price_history(ticker: str, days: int = 90) -> pd.DataFrame:
+def get_price_history(ticker: str, days: int = 90, timeframe: str = "Daily") -> pd.DataFrame:
     """Return historical OHLCV data."""
     if alpha_vantage_provider.is_configured():
         try:
-            return alpha_vantage_provider.get_daily_history(ticker, days)
+            return alpha_vantage_provider.get_price_history(ticker, periods=days, timeframe=timeframe)
         except alpha_vantage_provider.AlphaVantageError:
             pass
-    return mock_data.get_price_history(ticker, days)
+    history = mock_data.get_price_history(ticker, days)
+    history.attrs["source"] = f"Mock data ({timeframe})"
+    return history
+
+
+def _quote_from_daily_history(ticker: str) -> dict | None:
+    """Build a quote from Alpha Vantage daily history when GLOBAL_QUOTE is unavailable."""
+    try:
+        history = alpha_vantage_provider.get_daily_history(ticker, days=2)
+    except alpha_vantage_provider.AlphaVantageError:
+        return None
+
+    if len(history) < 2:
+        return None
+
+    latest = history.iloc[-1]
+    previous = history.iloc[-2]
+    price = float(latest["Close"])
+    previous_close = float(previous["Close"])
+    change_abs = price - previous_close
+    change_pct = (change_abs / previous_close * 100) if previous_close else 0
+    return {
+        "ticker": ticker,
+        "name": ticker,
+        "price": round(price, 2),
+        "change_pct": round(change_pct, 2),
+        "change_abs": round(change_abs, 2),
+        "volume": int(latest["Volume"]),
+        "price_source": "Alpha Vantage Daily History",
+    }
 
 
 def get_market_overview() -> pd.DataFrame:
@@ -67,6 +117,25 @@ def get_market_overview() -> pd.DataFrame:
 def get_top_movers() -> pd.DataFrame:
     """Return top mover snapshot."""
     return mock_data.get_top_movers()
+
+
+def get_top_movers_by_direction(limit: int = 10) -> dict:
+    """Return top gainers and losers with source metadata."""
+    if alpha_vantage_provider.is_configured():
+        try:
+            return alpha_vantage_provider.get_top_movers(limit)
+        except alpha_vantage_provider.AlphaVantageError:
+            pass
+
+    movers = mock_data.get_top_movers().copy()
+    gainers = movers[movers["Change %"] > 0].sort_values("Change %", ascending=False).head(limit)
+    losers = movers[movers["Change %"] < 0].sort_values("Change %", ascending=True).head(limit)
+    return {
+        "last_updated": "Mock data",
+        "source": "Mock fallback",
+        "gainers": gainers,
+        "losers": losers,
+    }
 
 
 def get_watchlist() -> pd.DataFrame:

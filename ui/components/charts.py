@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 import pandas as pd
+from plotly.subplots import make_subplots
 
+from analytics.technical.engine import calculate_rsi, calculate_simple_moving_average
 from utils.constants import COLORS
 
 
@@ -24,40 +26,100 @@ def _base_layout(title: str, height: int = 400) -> dict:
 
 
 def price_line_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
-    """Line chart for closing prices."""
-    # TODO: Add interactive range selectors and real-time updates
-    fig = go.Figure()
+    """Candlestick stock chart with moving averages, volume, and RSI(9)."""
+    prices = _prepare_price_frame(df)
+    x_values = _x_values_for_history(prices)
+    volume_colors = [
+        COLORS["positive"] if close >= open_ else COLORS["negative"]
+        for close, open_ in zip(prices["Close"], prices["Open"])
+    ]
+
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.04,
+        row_heights=[0.7, 0.12, 0.18],
+    )
+    fig.add_trace(
+        go.Candlestick(
+            x=x_values,
+            open=prices["Open"],
+            high=prices["High"],
+            low=prices["Low"],
+            close=prices["Close"],
+            name="Candles",
+            increasing=dict(line=dict(color=COLORS["positive"]), fillcolor=COLORS["positive"]),
+            decreasing=dict(line=dict(color=COLORS["negative"]), fillcolor=COLORS["negative"]),
+        ),
+        row=1,
+        col=1,
+    )
     fig.add_trace(
         go.Scatter(
-            x=df["Date"],
-            y=df["Close"],
+            x=x_values,
+            y=prices["MA20"],
             mode="lines",
-            name="Close",
-            line=dict(color=COLORS["secondary"], width=2),
-        )
+            name="20 MA",
+            line=dict(color="#1f77b4", width=2),
+            connectgaps=True,
+        ),
+        row=1,
+        col=1,
     )
-    fig.update_layout(**_base_layout(f"{ticker} — Price Chart (Mock)"))
+    fig.add_trace(
+        go.Scatter(
+            x=x_values,
+            y=prices["MA40"],
+            mode="lines",
+            name="40 MA",
+            line=dict(color=COLORS["negative"], width=2),
+            connectgaps=True,
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=x_values,
+            y=prices["Volume"],
+            marker_color=volume_colors,
+            name="Volume",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=x_values,
+            y=prices["RSI9"],
+            mode="lines",
+            name="RSI(9)",
+            line=dict(color="#6f42c1", width=2),
+            connectgaps=True,
+        ),
+        row=3,
+        col=1,
+    )
+    fig.add_hline(y=70, line_dash="dash", line_color=COLORS["negative"], opacity=0.6, row=3, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color=COLORS["positive"], opacity=0.6, row=3, col=1)
+    fig.update_layout(**_base_layout("", height=720))
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0),
+        hovermode="x unified",
+        bargap=0.15,
+    )
+    fig.update_xaxes(type="category")
+    fig.update_yaxes(title_text="Price", row=1, col=1, showgrid=True, gridcolor="#e8ecf0")
+    fig.update_yaxes(title_text="Volume", row=2, col=1, showgrid=True, gridcolor="#e8ecf0")
+    fig.update_yaxes(title_text="RSI", range=[0, 100], row=3, col=1, showgrid=True, gridcolor="#e8ecf0")
     return fig
 
 
 def candlestick_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
-    """Candlestick OHLC chart."""
-    # TODO: Overlay technical indicators on candlestick chart
-    fig = go.Figure(
-        data=[
-            go.Candlestick(
-                x=df["Date"],
-                open=df["Open"],
-                high=df["High"],
-                low=df["Low"],
-                close=df["Close"],
-                name="OHLC",
-            )
-        ]
-    )
-    fig.update_layout(**_base_layout(f"{ticker} — Candlestick (Mock)", height=450))
-    fig.update_layout(xaxis_rangeslider_visible=False)
-    return fig
+    """Stock chart alias retained for existing page calls."""
+    return price_line_chart(df, ticker)
 
 
 def volume_bar_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
@@ -77,13 +139,39 @@ def rsi_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
     """RSI indicator chart with overbought/oversold zones."""
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=df["Date"], y=df["RSI"], mode="lines", name="RSI", line=dict(color=COLORS["accent"]))
+        go.Scatter(x=df["Date"], y=df["RSI"], mode="lines", name="RSI(9)", line=dict(color="#6f42c1", width=2))
     )
     fig.add_hline(y=70, line_dash="dash", line_color=COLORS["negative"], annotation_text="Overbought")
     fig.add_hline(y=30, line_dash="dash", line_color=COLORS["positive"], annotation_text="Oversold")
-    fig.update_layout(**_base_layout(f"{ticker} — RSI (Mock)"))
+    fig.update_layout(**_base_layout(f"{ticker} — RSI(9)"))
     fig.update_layout(yaxis=dict(range=[0, 100]))
     return fig
+
+
+def _prepare_price_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return OHLCV data with MA20, MA40, and RSI(9) columns."""
+    prices = df.sort_values("Date").copy()
+    prices["MA20"] = calculate_simple_moving_average(prices["Close"], 20)
+    prices["MA40"] = calculate_simple_moving_average(prices["Close"], 40)
+    prices["RSI9"] = calculate_rsi(prices["Close"], 9)
+    return prices
+
+
+def _x_values_for_history(prices: pd.DataFrame) -> pd.Series:
+    """Return evenly spaced trading-bar labels for all chart timeframes."""
+    if not pd.api.types.is_datetime64_any_dtype(prices["Date"]):
+        return prices["Date"]
+
+    has_intraday_times = (prices["Date"].dt.time != pd.Timestamp("00:00").time()).any()
+    if has_intraday_times:
+        return prices["Date"].dt.strftime("%Y-%m-%d %H:%M")
+
+    median_spacing_days = prices["Date"].diff().dt.total_seconds().dropna().median() / 86_400
+    if median_spacing_days >= 25:
+        return prices["Date"].dt.strftime("%Y-%m")
+    if median_spacing_days >= 6:
+        return prices["Date"].dt.strftime("%Y-%m-%d")
+    return prices["Date"].dt.strftime("%Y-%m-%d")
 
 
 def macd_chart(df: pd.DataFrame, ticker: str) -> go.Figure:

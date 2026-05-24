@@ -10,7 +10,7 @@ from services.market_data_service import (
     get_market_overview,
     get_price_history,
     get_quote_summary,
-    get_top_movers,
+    get_top_movers_by_direction,
 )
 from utils.helpers import format_large_number, format_percent
 
@@ -31,6 +31,9 @@ def render() -> None:
                 delta=format_percent(row["Change %"]),
                 delta_value=row["Change %"],
             )
+    if "Source" in overview.columns:
+        sources = ", ".join(sorted(overview["Source"].unique()))
+        st.caption(f"Index source: {sources}")
 
     st.divider()
 
@@ -51,6 +54,9 @@ def render() -> None:
 def _render_symbol_panel(ticker: str, quote: dict) -> None:
     """Symbol detail and price chart."""
     st.write(f"**{quote['name']}** · {quote['sector']}")
+    st.caption(f"Price source: {quote.get('price_source', 'Unknown')} · Profile source: {quote.get('metadata_source', 'Unknown')}")
+    if quote.get("price_source", "").startswith("Mock"):
+        st.warning("Live quote unavailable right now. Showing mock fallback values for price/change/volume.")
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("Price", f"${quote['price']:.2f}", format_percent(quote["change_pct"]))
@@ -66,5 +72,11 @@ def _render_symbol_panel(ticker: str, quote: dict) -> None:
 
 def _render_movers_panel() -> None:
     """Top movers table."""
-    movers = get_top_movers()
-    st.dataframe(movers, use_container_width=True, hide_index=True)
+    movers = get_top_movers_by_direction(limit=10)
+    st.caption(f"Source: {movers['source']} · Last updated: {movers['last_updated']}")
+
+    st.markdown("**Top 10 Gainers**")
+    st.dataframe(movers["gainers"], use_container_width=True, hide_index=True)
+
+    st.markdown("**Top 10 Losers**")
+    st.dataframe(movers["losers"], use_container_width=True, hide_index=True)
