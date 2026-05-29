@@ -98,6 +98,7 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
 
         st.divider()
         st.caption("v0.1 — UI Preview")
+        st.caption("Developed by Sequence Consulting")
         st.caption(f"Market data: {get_market_data_status()}")
 
     return main_section, submenu

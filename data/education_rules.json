@@ -1,0 +1,40 @@
+{
+  "rules": [
+    {
+      "id": "sideways-options-wait",
+      "title": "Sideways markets reward patience",
+      "market_regime": "Sideways",
+      "instrument": "Options",
+      "lesson": "When price is moving sideways and implied volatility is high, short-term option buyers can lose money from time decay even if the stock does not move against them.",
+      "example": "If a stock stays near the same price for several days, a long call can lose value because expiration is getting closer.",
+      "risk_note": "Waiting for a breakout, selling premium only with defined risk, or using spreads can reduce exposure to time decay."
+    },
+    {
+      "id": "bullish-stock-vs-call",
+      "title": "Bullish views can be expressed with stock or calls",
+      "market_regime": "Bullish",
+      "instrument": "Stocks and Options",
+      "lesson": "Buying stock gives linear upside and downside. Buying calls gives leveraged upside but can expire worthless.",
+      "example": "A 5% stock rally benefits both a long stock position and a long call, but the call also depends on strike, premium, volatility, and time.",
+      "risk_note": "Options require direction, timing, and magnitude to be sufficiently favorable."
+    },
+    {
+      "id": "bearish-risk-defined",
+      "title": "Bearish trades should define risk before entry",
+      "market_regime": "Bearish",
+      "instrument": "Options",
+      "lesson": "Long puts and put spreads can express downside views with defined maximum loss.",
+      "example": "A long put can gain if the stock falls below strike minus premium before expiration.",
+      "risk_note": "Short options or uncovered bearish trades can create large losses if risk is not capped."
+    },
+    {
+      "id": "volatility-premium",
+      "title": "High implied volatility changes the trade",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "High implied volatility makes options more expensive. Buyers need a larger move to overcome premium paid.",
+      "example": "A call may be directionally correct but still lose money if implied volatility drops after entry.",
+      "risk_note": "Compare expected move, break-even price, and position sizing before entering."
+    }
+  ]
+}

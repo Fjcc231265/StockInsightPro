@@ -28,6 +28,7 @@ MAIN_SECTIONS = [
     "Portfolio Watchlist",
     "Reports",
     "Settings",
+    "Education",
 ]
 
 # Submenus keyed by main section
@@ -74,8 +75,6 @@ SUBMENUS = {
         "IV Rank",
         "Gamma Exposure",
         "Max Pain",
-        "Dealer Positioning",
-        "Options Flow",
         "AI Conclusions",
     ],
     "Portfolio Watchlist": [
@@ -93,5 +92,12 @@ SUBMENUS = {
         "Data source selection",
         "Theme options",
         "User preferences",
+    ],
+    "Education": [
+        "Learning roadmap",
+        "Rules playbook",
+        "Stock P&L simulator",
+        "Options P&L simulator",
+        "Market scenario lab",
     ],
 }

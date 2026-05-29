@@ -14,13 +14,11 @@ from ui.components.charts import (
 from ui.components.page_router import render_ticker_submenu_page
 from services.market_data_service import get_quote_summary
 from services.options_data_service import (
-    get_dealer_positioning,
     get_gamma_exposure,
     get_iv_rank_history,
     get_iv_term_structure,
     get_open_interest_by_strike,
     get_options_chain,
-    get_options_flow,
     get_options_kpis,
     get_put_call_ratio_history,
 )
@@ -37,13 +35,12 @@ def render(submenu: str) -> None:
         "IV Rank": lambda: _iv_rank(ticker),
         "Gamma Exposure": lambda: _gamma_exposure(ticker),
         "Max Pain": lambda: _max_pain(ticker),
-        "Dealer Positioning": _dealer_positioning,
-        "Options Flow": _options_flow,
         "AI Conclusions": lambda: _ai_conclusions(ticker),
     }
     st.info(
         "Options Intelligence now uses Alpha Vantage HISTORICAL_OPTIONS when available. "
-        "Mock options data is disabled, so unavailable Alpha Vantage data will be shown as unavailable."
+        "Mock options data is disabled. Dealer positioning and options flow are hidden until a provider "
+        "with those datasets is added."
     )
     render_ticker_submenu_page(
         "Options Intelligence",
@@ -538,26 +535,6 @@ def _render_max_pain_interpretation(ticker: str, oi, max_pain: float) -> None:
         "It can act like a potential pinning or magnet zone when expiration is close and open interest is large. "
         "It is **not** a consensus price target or guaranteed forecast for the next 30 days."
     )
-
-
-def _dealer_positioning() -> None:
-    """Dealer positioning unavailable state."""
-    positioning = get_dealer_positioning()
-    st.markdown("#### Dealer Positioning Dashboard")
-    _render_source_caption(positioning)
-    if not _has_options_data(positioning):
-        return
-    st.dataframe(positioning, use_container_width=True, hide_index=True)
-
-
-def _options_flow() -> None:
-    """Options flow unavailable state."""
-    flow = get_options_flow()
-    st.markdown("#### Institutional Options Flow Tape")
-    _render_source_caption(flow)
-    if not _has_options_data(flow):
-        return
-    st.dataframe(flow, use_container_width=True, hide_index=True)
 
 
 def _ai_conclusions(ticker: str) -> None:

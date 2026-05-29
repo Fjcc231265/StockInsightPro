@@ -21,6 +21,7 @@ from ui.components.layout import render_app_header
 from ui.components.sidebar import render_sidebar
 from ui.components.styles import get_custom_css
 from ui.pages import (
+    education,
     fundamental,
     home,
     market_sector,
@@ -69,6 +70,7 @@ PAGE_REGISTRY = {
     "Portfolio Watchlist": (portfolio.render, True),
     "Reports": (reports.render, True),
     "Settings": (settings.render, True),
+    "Education": (education.render, True),
 }
 
 render_app_header(main_section)
@@ -86,6 +88,13 @@ else:
 # ── Footer ──────────────────────────────────────────────────────────────────────
 st.divider()
 st.caption(
-    f"{APP_NAME} v0.1 · Market data: {get_market_data_status()} · Not financial advice · "
+    f"{APP_NAME} v0.1 · Market data: {get_market_data_status()} · "
     f"Active: {main_section}" + (f" → {submenu}" if submenu else "")
+)
+st.caption(
+    "Disclosure: This platform is provided for informational and educational purposes only and does not constitute "
+    "financial, investment, tax, legal, or trading advice. Financial markets involve substantial risk, including the "
+    "possible loss of principal. Users are solely responsible for their own investment decisions, due diligence, and "
+    "risk management. StockInsightPro and its developer assume no responsibility or liability for any losses, damages, "
+    "or decisions made based on the information displayed."
 )

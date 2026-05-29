@@ -240,7 +240,7 @@ def get_market_overview() -> pd.DataFrame:
             return overview
         except alpha_vantage_provider.AlphaVantageError as exc:
             fallback = mock_data.get_market_overview()
-            fallback.attrs["source"] = f"Mock fallback - Alpha Vantage index data unavailable: {exc}"
+            fallback.attrs["source"] = f"Mock fallback - Alpha Vantage ETF proxy data unavailable: {exc}"
             _MARKET_OVERVIEW_CACHE = (time.time(), fallback.copy())
             return fallback
     fallback = mock_data.get_market_overview()

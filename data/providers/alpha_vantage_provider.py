@@ -27,13 +27,29 @@ CACHE_TTL_SECONDS = 300
 MIN_REQUEST_INTERVAL_SECONDS = 0.25
 
 INDEX_SERIES = [
-    {"label": "S&P 500", "index_symbol": "SPX"},
-    {"label": "Nasdaq Composite", "index_symbol": "COMP"},
-    {"label": "Dow Jones", "index_symbol": "DJI"},
-    {"label": "Volatility", "index_symbol": "VIX"},
+    {
+        "label": "S&P 500 ETF",
+        "proxy_symbol": "SPY",
+        "description": "SPDR S&P 500 ETF Trust proxy for S&P 500 exposure",
+    },
+    {
+        "label": "Nasdaq 100 ETF",
+        "proxy_symbol": "QQQ",
+        "description": "Invesco QQQ Trust proxy for Nasdaq large-cap growth exposure",
+    },
+    {
+        "label": "Dow Jones ETF",
+        "proxy_symbol": "DIA",
+        "description": "SPDR Dow Jones Industrial Average ETF Trust proxy for Dow exposure",
+    },
+    {
+        "label": "VIX Futures ETF",
+        "proxy_symbol": "VIXY",
+        "description": "ProShares VIX Short-Term Futures ETF; VIX-related futures proxy, not spot VIX",
+    },
 ]
 
-INDEX_PROXIES: list[tuple[str, str]] = []
+INDEX_PROXIES: list[tuple[str, str]] = [(item["label"], item["proxy_symbol"]) for item in INDEX_SERIES]
 
 SECTOR_ETF_PROXIES = [
     {"sector": "Technology", "symbol": "XLK"},
@@ -431,11 +447,31 @@ def _history_request(ticker: str, periods: int, timeframe: str) -> tuple[dict[st
 
 
 def get_index_snapshot(label: str, item: dict[str, Any]) -> dict:
-    """Return latest index value from Alpha Vantage INDEX_DATA."""
-    index_symbol = item.get("index_symbol")
-    if not index_symbol:
-        raise AlphaVantageError(f"No index symbol configured for {label}.")
-    return _get_index_snapshot_from_index_data(label, index_symbol)
+    """Return latest market proxy value from a liquid ETF."""
+    proxy_symbol = item.get("proxy_symbol")
+    if not proxy_symbol:
+        raise AlphaVantageError(f"No ETF proxy configured for {label}.")
+    return _get_index_snapshot_from_etf_proxy(label, proxy_symbol, item.get("description", "ETF proxy"))
+
+
+def _get_index_snapshot_from_etf_proxy(label: str, symbol: str, description: str) -> dict:
+    """Return the latest market snapshot from an Alpha Vantage ETF time series."""
+    history = get_price_history(symbol, periods=2, timeframe="Daily")
+    if len(history) < 2:
+        raise AlphaVantageError(f"No usable ETF proxy history returned for {label} ({symbol}).")
+
+    latest = history.iloc[-1]
+    previous = history.iloc[-2]
+    value = float(latest["Close"])
+    previous_close = float(previous["Close"])
+    change_pct = ((value - previous_close) / previous_close * 100) if previous_close else 0
+    return {
+        "Index": label,
+        "Symbol": symbol,
+        "Value": round(value, 2),
+        "Change %": round(change_pct, 2),
+        "Source": f"{history.attrs.get('source', 'Alpha Vantage Daily')} · {description}",
+    }
 
 
 def _get_index_snapshot_from_index_data(label: str, symbol: str) -> dict:
@@ -494,7 +530,9 @@ def get_market_overview() -> pd.DataFrame:
     if not rows:
         detail = str(last_error) if last_error else "No market index data returned."
         raise AlphaVantageError(detail)
-    return pd.DataFrame(rows)
+    overview = pd.DataFrame(rows)
+    overview.attrs["source"] = "Alpha Vantage ETF proxies (SPY, QQQ, DIA, VIXY)"
+    return overview
 
 
 def get_sector_performance() -> pd.DataFrame:
