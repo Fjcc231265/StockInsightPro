@@ -7,20 +7,53 @@ import pandas as pd
 from ai.market_interpreter import summarize_fundamental_health
 from data import mock_data
 from data.providers import alpha_vantage_provider
+from services.settings_service import should_use_alpha_vantage
 
 
 def get_financial_statement(statement_type: str, ticker: str, period: str = "Annual") -> pd.DataFrame:
     """Return income, balance sheet, or cash flow statement."""
-    if alpha_vantage_provider.is_configured():
+    if should_use_alpha_vantage("fundamentals") and alpha_vantage_provider.is_configured():
         try:
             return alpha_vantage_provider.get_financial_statement(statement_type, ticker, period)
-        except alpha_vantage_provider.AlphaVantageError:
-            pass
+        except alpha_vantage_provider.AlphaVantageError as exc:
+            empty = pd.DataFrame(columns=["Metric"])
+            empty.attrs["source"] = f"Alpha Vantage {statement_type.title()} Statement ({period})"
+            empty.attrs["currency"] = "USD"
+            empty.attrs["error"] = str(exc)
+            return empty
 
     statement = mock_data.get_financial_statement(statement_type, ticker)
     statement.attrs["source"] = f"Mock fallback ({period})"
     statement.attrs["currency"] = "USD"
     return statement
+
+
+def get_latest_earnings_release(ticker: str) -> dict:
+    """Return the latest earnings release summary."""
+    if should_use_alpha_vantage("fundamentals") and alpha_vantage_provider.is_configured():
+        try:
+            return alpha_vantage_provider.get_latest_earnings_release(ticker)
+        except alpha_vantage_provider.AlphaVantageError:
+            pass
+
+    return mock_data.get_latest_earnings_release(ticker)
+
+
+def get_earnings_calendar(ticker: str, horizon: str = "3month") -> pd.DataFrame:
+    """Return upcoming earnings calendar rows."""
+    if not should_use_alpha_vantage("fundamentals") or not alpha_vantage_provider.is_configured():
+        return mock_data.get_earnings_calendar(ticker)
+
+    try:
+        return alpha_vantage_provider.get_earnings_calendar(ticker, horizon)
+    except alpha_vantage_provider.AlphaVantageError as exc:
+        empty = pd.DataFrame(
+            columns=["Ticker", "Company", "Report Date", "Fiscal Date Ending", "EPS Estimate", "Currency"]
+        )
+        empty.attrs["source"] = "Alpha Vantage Earnings Calendar"
+        empty.attrs["horizon"] = horizon
+        empty.attrs["error"] = str(exc)
+        return empty
 
 
 def get_statement_variation(statement: pd.DataFrame) -> pd.DataFrame:

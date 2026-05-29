@@ -6,7 +6,8 @@ from typing import Optional, Tuple
 
 import streamlit as st
 
-from services.market_data_service import get_available_tickers, get_market_data_status
+from services.market_data_service import get_available_tickers, get_market_data_status, load_favorite_symbols
+from services.settings_service import load_user_settings
 from utils.branding import LOGO_SIDEBAR, logo_as_base64, logo_exists
 from utils.constants import APP_NAME, DEFAULT_TICKER, MAIN_SECTIONS, SUBMENUS
 from utils.helpers import normalize_ticker
@@ -37,7 +38,8 @@ def init_session_state() -> None:
         "submenu": None,
         "selected_ticker": DEFAULT_TICKER,
         "custom_ticker": "",
-        "watchlist": ["AAPL", "MSFT", "NVDA", "GOOGL"],
+        "watchlist": load_favorite_symbols(),
+        "user_settings": load_user_settings(),
     }
     for key, value in defaults.items():
         if key not in st.session_state:

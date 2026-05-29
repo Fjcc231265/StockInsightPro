@@ -7,6 +7,7 @@ from ui.components.charts import sentiment_gauge
 from ui.components.page_router import render_ticker_submenu_page
 from ai.market_interpreter import summarize_news_and_sentiment
 from services.news_data_service import (
+    get_insider_transactions,
     get_key_risks,
     get_market_catalysts,
     get_news_items,
@@ -20,6 +21,7 @@ def render(submenu: str) -> None:
     handlers = {
         "Latest news": lambda: _latest_news(ticker),
         "Sentiment score": _sentiment_score,
+        "Insider transactions": lambda: _insider_transactions(ticker),
         "Key risks": _key_risks,
         "Market catalysts": _catalysts,
         "AI summary placeholder": lambda: _ai_summary(ticker),
@@ -61,6 +63,48 @@ def _sentiment_score() -> None:
     with col2:
         st.caption(f"Source: {summary['source']}")
         st.dataframe(live_scores, use_container_width=True, hide_index=True)
+
+
+def _insider_transactions(ticker: str) -> None:
+    """Recent insider transactions from Alpha Vantage."""
+    st.markdown("**Insider Transactions**")
+    st.caption("Uses Alpha Vantage INSIDER_TRANSACTIONS when configured, with mock fallback if live data is unavailable.")
+
+    limit = st.slider("Number of insider transactions", min_value=10, max_value=100, value=50, step=10)
+    transactions_key = f"show_insider_transactions_{ticker}_{limit}"
+    if st.button("Load insider transactions", key=f"insider_transactions_button_{ticker}_{limit}", type="primary"):
+        st.session_state[transactions_key] = True
+
+    if not st.session_state.get(transactions_key):
+        st.info("Click the button to fetch recent insider transactions for the selected ticker.")
+        return
+
+    with st.spinner("Loading insider transactions..."):
+        transactions = get_insider_transactions(ticker, limit)
+
+    source = transactions.attrs.get("source", "Unknown")
+    st.caption(f"Source: {source}")
+    if source.startswith("Mock"):
+        st.warning("Live Alpha Vantage insider transactions unavailable right now. Showing mock fallback values.")
+
+    if transactions.empty:
+        st.info(f"No insider transactions returned for {ticker}.")
+        return
+
+    _render_insider_summary(transactions)
+    st.dataframe(transactions, use_container_width=True, hide_index=True)
+
+
+def _render_insider_summary(transactions) -> None:
+    """Render acquisition/disposal counts for insider transactions."""
+    type_counts = transactions["Type"].value_counts()
+    cols = st.columns(3)
+    with cols[0]:
+        st.metric("Total Transactions", len(transactions))
+    with cols[1]:
+        st.metric("Acquisitions", int(type_counts.get("Acquisition", 0)))
+    with cols[2]:
+        st.metric("Disposals", int(type_counts.get("Disposal", 0)))
 
 
 def _key_risks() -> None:

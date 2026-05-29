@@ -6,17 +6,18 @@ import pandas as pd
 
 from data import mock_data
 from data.providers import alpha_vantage_provider
+from services.settings_service import should_use_alpha_vantage
 
 
 def get_news_items(ticker: str, limit: int = 8) -> pd.DataFrame:
     """Return latest news items."""
-    if alpha_vantage_provider.is_configured():
+    if should_use_alpha_vantage("news") and alpha_vantage_provider.is_configured():
         try:
             return alpha_vantage_provider.get_news_sentiment(ticker, limit)
         except alpha_vantage_provider.AlphaVantageError:
             pass
 
-    news = mock_data.get_news_items(ticker, limit)
+    news = mock_data.get_news_items(ticker, limit=limit)
     news.attrs["source"] = "Mock fallback"
     return news
 
@@ -25,6 +26,17 @@ def get_sentiment_scores() -> pd.DataFrame:
     """Return sentiment source scores."""
     # TODO: Replace with NLP sentiment pipeline output.
     return mock_data.get_sentiment_scores()
+
+
+def get_insider_transactions(ticker: str, limit: int = 50) -> pd.DataFrame:
+    """Return recent insider transactions."""
+    if should_use_alpha_vantage("news") and alpha_vantage_provider.is_configured():
+        try:
+            return alpha_vantage_provider.get_insider_transactions(ticker, limit)
+        except alpha_vantage_provider.AlphaVantageError:
+            pass
+
+    return mock_data.get_insider_transactions(ticker, limit)
 
 
 def get_news_sentiment_summary(ticker: str, limit: int = 20) -> dict:

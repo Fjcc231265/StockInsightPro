@@ -6,6 +6,7 @@ objects and raises provider-specific errors to be handled by services.
 
 from __future__ import annotations
 
+import io
 import time
 import urllib.parse
 import urllib.request
@@ -14,25 +15,44 @@ from typing import Any
 
 import pandas as pd
 
+from analytics.technical.engine import calculate_adx, calculate_macd, calculate_rsi
+from data import disk_cache
 from utils.config import get_alpha_vantage_api_key
 from utils.helpers import format_large_number
+
+DISK_CACHE_NAMESPACE = "alpha_vantage"
 
 BASE_URL = "https://www.alphavantage.co/query"
 CACHE_TTL_SECONDS = 300
 MIN_REQUEST_INTERVAL_SECONDS = 0.25
 
 INDEX_SERIES = [
-    {"label": "S&P 500", "symbol": "SPX", "proxy_symbol": "SPY"},
-    {"label": "Nasdaq Composite", "symbol": "COMP", "proxy_symbol": "ONEQ"},
-    {"label": "Dow Jones", "symbol": "DJI", "proxy_symbol": "DIA"},
-    {"label": "Russell 2000", "symbol": "RUT", "proxy_symbol": "IWM"},
-    {"label": "Volatility", "symbol": "VIX", "proxy_symbol": "VXX"},
+    {"label": "S&P 500", "index_symbol": "SPX"},
+    {"label": "Nasdaq Composite", "index_symbol": "COMP"},
+    {"label": "Dow Jones", "index_symbol": "DJI"},
+    {"label": "Volatility", "index_symbol": "VIX"},
 ]
 
-INDEX_PROXIES = [(item["label"], item["proxy_symbol"]) for item in INDEX_SERIES]
+INDEX_PROXIES: list[tuple[str, str]] = []
 
-_CACHE: dict[tuple[tuple[str, str], ...], tuple[float, dict[str, Any]]] = {}
+SECTOR_ETF_PROXIES = [
+    {"sector": "Technology", "symbol": "XLK"},
+    {"sector": "Communication Services", "symbol": "XLC"},
+    {"sector": "Consumer Cyclical", "symbol": "XLY"},
+    {"sector": "Financial Services", "symbol": "XLF"},
+    {"sector": "Healthcare", "symbol": "XLV"},
+    {"sector": "Industrials", "symbol": "XLI"},
+    {"sector": "Energy", "symbol": "XLE"},
+    {"sector": "Consumer Defensive", "symbol": "XLP"},
+    {"sector": "Utilities", "symbol": "XLU"},
+    {"sector": "Real Estate", "symbol": "XLRE"},
+    {"sector": "Materials", "symbol": "XLB"},
+]
+
+_CACHE: dict[tuple[tuple[str, str], ...], tuple[float, Any]] = {}
 _LAST_REQUEST_AT = 0.0
+# Bypass IDE/shell HTTP_PROXY values that can return 403 for external API calls.
+_DIRECT_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class AlphaVantageError(RuntimeError):
@@ -44,8 +64,73 @@ def is_configured() -> bool:
     return get_alpha_vantage_api_key() is not None
 
 
+def clear_caches() -> None:
+    """Clear in-memory Alpha Vantage response cache."""
+    _CACHE.clear()
+
+
+def _disk_cache_enabled() -> bool:
+    try:
+        from services.settings_service import is_disk_cache_enabled
+
+        return is_disk_cache_enabled()
+    except Exception:  # noqa: BLE001 - settings may be unavailable during import
+        return True
+
+
+def _ttl_for_params(params: dict[str, str]) -> int:
+    try:
+        from services.settings_service import get_cache_ttl_for_function
+
+        return get_cache_ttl_for_function(params.get("function", ""))
+    except Exception:  # noqa: BLE001
+        return CACHE_TTL_SECONDS
+
+
+def _urlopen_direct(url: str, timeout: int = 20):
+    """Open an Alpha Vantage URL without routing through local HTTP proxies."""
+    return _DIRECT_HTTP_OPENER.open(url, timeout=timeout)
+
+
+def _read_url_payload(url: str, timeout: int = 20) -> str:
+    """Read an Alpha Vantage URL, retrying system proxy only for DNS failures."""
+    try:
+        with _urlopen_direct(url, timeout=timeout) as response:
+            return response.read().decode("utf-8")
+    except Exception as direct_exc:  # noqa: BLE001 - normalized by provider boundary
+        message = str(direct_exc)
+        if "nodename nor servname provided" not in message and "Name or service not known" not in message:
+            raise
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as response:
+                return response.read().decode("utf-8")
+        except Exception as proxy_exc:  # noqa: BLE001
+            raise AlphaVantageError(
+                "Alpha Vantage network lookup failed both directly and through the configured proxy. "
+                f"Direct error: {message}; proxy error: {proxy_exc}"
+            ) from proxy_exc
+
+
+def _format_request_error(exc: Exception) -> str:
+    """Return a clearer network error message for proxy/tunnel failures."""
+    message = str(exc)
+    if "Tunnel connection failed" in message or "403 Forbidden" in message:
+        return (
+            "A local HTTP proxy blocked the Alpha Vantage request. "
+            "Restart Streamlit after updating the app; if it persists, disable VPN/proxy "
+            f"or unset HTTP_PROXY/HTTPS_PROXY in the shell that launches Streamlit. ({message})"
+        )
+    if "nodename nor servname provided" in message or "Name or service not known" in message:
+        return (
+            "DNS could not resolve Alpha Vantage from this process. "
+            "This is a local network/VPN/proxy issue; cached data will be used when available. "
+            f"({message})"
+        )
+    return f"Alpha Vantage request failed: {message}"
+
+
 def _request(params: dict[str, str]) -> dict[str, Any]:
-    """Call Alpha Vantage with a small in-memory TTL cache."""
+    """Call Alpha Vantage with in-memory and optional disk TTL cache."""
     global _LAST_REQUEST_AT
 
     api_key = get_alpha_vantage_api_key()
@@ -54,9 +139,16 @@ def _request(params: dict[str, str]) -> dict[str, Any]:
 
     request_params = {**params, "apikey": api_key}
     cache_key = tuple(sorted(request_params.items()))
+    ttl_seconds = _ttl_for_params(request_params)
     cached = _CACHE.get(cache_key)
-    if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
+    if cached and time.time() - cached[0] < ttl_seconds:
         return cached[1]
+
+    if _disk_cache_enabled():
+        disk_cached = disk_cache.get_json(DISK_CACHE_NAMESPACE, request_params, ttl_seconds)
+        if disk_cached is not None:
+            _CACHE[cache_key] = (time.time(), disk_cached)
+            return disk_cached
 
     elapsed = time.time() - _LAST_REQUEST_AT
     if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
@@ -64,11 +156,24 @@ def _request(params: dict[str, str]) -> dict[str, Any]:
 
     url = f"{BASE_URL}?{urllib.parse.urlencode(request_params)}"
     try:
-        with urllib.request.urlopen(url, timeout=20) as response:
-            payload = response.read().decode("utf-8")
+        payload = _read_url_payload(url, timeout=20)
         _LAST_REQUEST_AT = time.time()
+    except AlphaVantageError as exc:
+        if _disk_cache_enabled():
+            stale_cached = disk_cache.get_json_stale(DISK_CACHE_NAMESPACE, request_params)
+            if stale_cached is not None:
+                stale_cached.setdefault("_cache_warning", str(exc))
+                _CACHE[cache_key] = (time.time(), stale_cached)
+                return stale_cached
+        raise
     except Exception as exc:  # noqa: BLE001 - provider boundary converts all failures
-        raise AlphaVantageError(f"Alpha Vantage request failed: {exc}") from exc
+        if _disk_cache_enabled():
+            stale_cached = disk_cache.get_json_stale(DISK_CACHE_NAMESPACE, request_params)
+            if stale_cached is not None:
+                stale_cached.setdefault("_cache_warning", _format_request_error(exc))
+                _CACHE[cache_key] = (time.time(), stale_cached)
+                return stale_cached
+        raise AlphaVantageError(_format_request_error(exc)) from exc
 
     try:
         data = json.loads(payload)
@@ -81,7 +186,76 @@ def _request(params: dict[str, str]) -> dict[str, Any]:
         raise AlphaVantageError(data.get("Note") or data.get("Information"))
 
     _CACHE[cache_key] = (time.time(), data)
+    if _disk_cache_enabled():
+        disk_cache.set_json(DISK_CACHE_NAMESPACE, request_params, data, ttl_seconds)
     return data
+
+
+def _request_csv(params: dict[str, str]) -> pd.DataFrame:
+    """Call an Alpha Vantage endpoint that returns CSV data."""
+    global _LAST_REQUEST_AT
+
+    api_key = get_alpha_vantage_api_key()
+    if not api_key:
+        raise AlphaVantageError("Alpha Vantage API key is not configured.")
+
+    request_params = {**params, "apikey": api_key}
+    cache_key = tuple(sorted(request_params.items()))
+    ttl_seconds = _ttl_for_params(request_params)
+    cached = _CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < ttl_seconds:
+        return cached[1].copy()
+
+    if _disk_cache_enabled():
+        disk_cached = disk_cache.get_text(DISK_CACHE_NAMESPACE, request_params, ttl_seconds)
+        if disk_cached is not None:
+            frame = pd.read_csv(io.StringIO(disk_cached))
+            _CACHE[cache_key] = (time.time(), frame.copy())
+            return frame
+
+    elapsed = time.time() - _LAST_REQUEST_AT
+    if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
+        time.sleep(MIN_REQUEST_INTERVAL_SECONDS - elapsed)
+
+    url = f"{BASE_URL}?{urllib.parse.urlencode(request_params)}"
+    try:
+        payload = _read_url_payload(url, timeout=20)
+        _LAST_REQUEST_AT = time.time()
+    except AlphaVantageError as exc:
+        if _disk_cache_enabled():
+            stale_cached = disk_cache.get_text_stale(DISK_CACHE_NAMESPACE, request_params)
+            if stale_cached is not None:
+                frame = pd.read_csv(io.StringIO(stale_cached))
+                frame.attrs["cache_warning"] = str(exc)
+                _CACHE[cache_key] = (time.time(), frame.copy())
+                return frame
+        raise
+    except Exception as exc:  # noqa: BLE001 - provider boundary converts all failures
+        if _disk_cache_enabled():
+            stale_cached = disk_cache.get_text_stale(DISK_CACHE_NAMESPACE, request_params)
+            if stale_cached is not None:
+                frame = pd.read_csv(io.StringIO(stale_cached))
+                frame.attrs["cache_warning"] = _format_request_error(exc)
+                _CACHE[cache_key] = (time.time(), frame.copy())
+                return frame
+        raise AlphaVantageError(_format_request_error(exc)) from exc
+
+    if payload.lstrip().startswith("{"):
+        try:
+            data = json.loads(payload)
+        except Exception as exc:  # noqa: BLE001
+            raise AlphaVantageError("Alpha Vantage returned invalid CSV/JSON.") from exc
+        raise AlphaVantageError(data.get("Note") or data.get("Information") or data.get("Error Message") or payload)
+
+    try:
+        frame = pd.read_csv(io.StringIO(payload))
+    except Exception as exc:  # noqa: BLE001
+        raise AlphaVantageError("Alpha Vantage returned invalid CSV.") from exc
+
+    _CACHE[cache_key] = (time.time(), frame.copy())
+    if _disk_cache_enabled():
+        disk_cache.set_text(DISK_CACHE_NAMESPACE, request_params, payload, ttl_seconds)
+    return frame
 
 
 def _parse_float(value: str | float | int, default: float = 0.0) -> float:
@@ -155,9 +329,6 @@ def get_company_overview(ticker: str) -> dict:
 def get_price_history(ticker: str, periods: int = 90, timeframe: str = "Daily") -> pd.DataFrame:
     """Return OHLCV history for a ticker across Alpha Vantage timeframes."""
     timeframe_key = timeframe.lower()
-    if timeframe_key in {"weekly", "monthly"}:
-        return _get_resampled_adjusted_history(ticker, periods, timeframe_key)
-
     request_params, series_key = _history_request(ticker, periods, timeframe)
     data = _request(request_params)
     series = data.get(series_key)
@@ -259,73 +430,381 @@ def _history_request(ticker: str, periods: int, timeframe: str) -> tuple[dict[st
     raise AlphaVantageError(f"Unsupported timeframe: {timeframe}.")
 
 
-def get_index_snapshot(label: str, symbol: str) -> dict:
-    """Return the latest index value from Alpha Vantage INDEX_DATA."""
-    data = _request({"function": "INDEX_DATA", "symbol": symbol, "interval": "daily"})
-    rows = data.get("data")
-    if not rows:
-        series = data.get("Time Series (Daily)", {})
-        rows = [
-            {"date": date_str, **values}
-            for date_str, values in series.items()
-        ]
-    if not rows or len(rows) < 2:
-        raise AlphaVantageError(f"No index data returned for {symbol}.")
+def get_index_snapshot(label: str, item: dict[str, Any]) -> dict:
+    """Return latest index value from Alpha Vantage INDEX_DATA."""
+    index_symbol = item.get("index_symbol")
+    if not index_symbol:
+        raise AlphaVantageError(f"No index symbol configured for {label}.")
+    return _get_index_snapshot_from_index_data(label, index_symbol)
 
-    rows = sorted(rows, key=lambda row: row.get("date") or row.get("timestamp") or row.get("time") or "")
-    latest = rows[-1]
-    previous = rows[-2]
-    value = _parse_float(latest.get("close") or latest.get("4. close"))
-    previous_close = _parse_float(previous.get("close") or previous.get("4. close"))
-    change_pct = ((value - previous_close) / previous_close * 100) if previous_close else 0
-    return {
-        "Index": label,
-        "Symbol": symbol,
-        "Value": round(value, 2),
-        "Change %": round(change_pct, 2),
-        "Source": "Alpha Vantage Index Data",
-    }
+
+def _get_index_snapshot_from_index_data(label: str, symbol: str) -> dict:
+    """Return the latest index value from Alpha Vantage INDEX_DATA."""
+    errors: list[str] = []
+    for interval in ("daily", "weekly"):
+        try:
+            data = _request({"function": "INDEX_DATA", "symbol": symbol, "interval": interval})
+        except AlphaVantageError as exc:
+            errors.append(str(exc))
+            continue
+
+        rows = data.get("data")
+        if not rows:
+            series = data.get("Time Series (Daily)", {})
+            rows = [
+                {"date": date_str, **values}
+                for date_str, values in series.items()
+            ]
+        if not rows or len(rows) < 2:
+            errors.append(f"No index data returned for {symbol} ({interval}).")
+            continue
+
+        rows = sorted(
+            rows,
+            key=lambda row: row.get("date") or row.get("timestamp") or row.get("time") or "",
+        )
+        latest = rows[-1]
+        previous = rows[-2]
+        value = _parse_float(latest.get("close") or latest.get("4. close"))
+        previous_close = _parse_float(previous.get("close") or previous.get("4. close"))
+        change_pct = ((value - previous_close) / previous_close * 100) if previous_close else 0
+        return {
+            "Index": label,
+            "Symbol": symbol,
+            "Value": round(value, 2),
+            "Change %": round(change_pct, 2),
+            "Source": f"Alpha Vantage INDEX_DATA ({symbol}, {interval})",
+        }
+
+    raise AlphaVantageError(
+        f"No index data returned for {label} ({symbol}). {' | '.join(errors[:2])}"
+    )
 
 
 def get_market_overview() -> pd.DataFrame:
-    """Return index dashboard rows using Alpha Vantage index data with explicit proxy fallback."""
+    """Return index dashboard rows using real Alpha Vantage index data."""
     rows = []
-    use_index_data = True
+    last_error: AlphaVantageError | None = None
     for item in INDEX_SERIES:
-        if use_index_data:
-            try:
-                rows.append(get_index_snapshot(item["label"], item["symbol"]))
-                continue
-            except AlphaVantageError:
-                use_index_data = False
-
-        quote = get_quote(item["proxy_symbol"])
-        rows.append(
-            {
-                "Index": f"{item['label']} Proxy",
-                "Symbol": item["proxy_symbol"],
-                "Value": quote["price"],
-                "Change %": quote["change_pct"],
-                "Source": f"ETF proxy fallback ({item['proxy_symbol']})",
-            }
-        )
+        try:
+            rows.append(get_index_snapshot(item["label"], item))
+        except AlphaVantageError as exc:
+            last_error = exc
+            continue
+    if not rows:
+        detail = str(last_error) if last_error else "No market index data returned."
+        raise AlphaVantageError(detail)
     return pd.DataFrame(rows)
+
+
+def get_sector_performance() -> pd.DataFrame:
+    """Return sector performance using compact daily plus native monthly ETF history."""
+    rows = []
+    for item in SECTOR_ETF_PROXIES:
+        try:
+            daily_history = get_price_history(item["symbol"], periods=100, timeframe="Daily")
+            monthly_history = get_price_history(item["symbol"], periods=48, timeframe="Monthly")
+        except AlphaVantageError:
+            continue
+        rows.append(_sector_performance_row(item["sector"], item["symbol"], daily_history, monthly_history))
+
+    if not rows:
+        raise AlphaVantageError("No sector ETF performance data returned.")
+
+    sector_df = pd.DataFrame(rows)
+    sector_df.attrs["source"] = "Alpha Vantage sector ETF proxies"
+    return sector_df
+
+
+def get_sector_rsi_history(days: int = 60, time_period: int = 14) -> pd.DataFrame:
+    """Return sector ETF RSI history calculated from cached daily price data."""
+    series_by_sector = []
+    for item in SECTOR_ETF_PROXIES:
+        try:
+            history = get_price_history(
+                item["symbol"],
+                periods=max(days + time_period + 10, 100),
+                timeframe="Daily",
+            ).sort_values("Date")
+        except AlphaVantageError:
+            continue
+
+        rsi_series = pd.DataFrame(
+            {
+                "Date": history["Date"],
+                "RSI": calculate_rsi(history["Close"], window=time_period).round(2),
+            }
+        ).tail(days)
+        column_name = f"{item['sector']} ({item['symbol']})"
+        series_by_sector.append(rsi_series.set_index("Date")["RSI"].rename(column_name))
+
+    if not series_by_sector:
+        raise AlphaVantageError("No sector ETF price data returned for RSI rotation.")
+
+    rsi_df = pd.concat(series_by_sector, axis=1).sort_index().tail(days).reset_index()
+    rsi_df.attrs["source"] = f"Alpha Vantage sector ETF RSI({time_period}) from daily OHLC"
+    return rsi_df
+
+
+def get_rsi_history(symbol: str, days: int = 60, time_period: int = 14) -> pd.DataFrame:
+    """Return RSI history calculated from cached daily OHLC."""
+    lookback = 100 if days <= 90 else max(days + time_period + 10, 100)
+    history = get_price_history(symbol, periods=lookback, timeframe="Daily").sort_values("Date")
+    if history.empty:
+        raise AlphaVantageError(f"No daily price history returned for {symbol}.")
+
+    rsi_df = pd.DataFrame(
+        {
+            "Date": history["Date"],
+            "RSI": calculate_rsi(history["Close"], window=time_period).round(2),
+        }
+    ).tail(days)
+    rsi_df.attrs["source"] = f"{history.attrs.get('source', 'Daily OHLC')} · RSI({time_period})"
+    return rsi_df.reset_index(drop=True)
+
+
+def macd_from_history(
+    history: pd.DataFrame,
+    days: int = 60,
+    fastperiod: int = 12,
+    slowperiod: int = 26,
+    signalperiod: int = 9,
+) -> pd.DataFrame:
+    """Build MACD history from an existing daily OHLC dataframe."""
+    if history.empty:
+        raise AlphaVantageError("No daily price history available for MACD.")
+
+    macd_values = calculate_macd(
+        history["Close"],
+        fastperiod=fastperiod,
+        slowperiod=slowperiod,
+        signalperiod=signalperiod,
+    ).round(4)
+    macd_df = pd.DataFrame({"Date": history["Date"], **macd_values}).tail(days)
+    macd_df.attrs["source"] = (
+        f"{history.attrs.get('source', 'Daily OHLC')} · MACD({fastperiod},{slowperiod},{signalperiod})"
+    )
+    return macd_df.reset_index(drop=True)
+
+
+def get_macd_history(
+    symbol: str,
+    days: int = 60,
+    fastperiod: int = 12,
+    slowperiod: int = 26,
+    signalperiod: int = 9,
+) -> pd.DataFrame:
+    """Return MACD history calculated from cached daily OHLC."""
+    lookback = 100 if days <= 60 else max(days + slowperiod + signalperiod + 10, 100)
+    history = get_price_history(symbol, periods=lookback, timeframe="Daily").sort_values("Date")
+    return macd_from_history(history, days=days, fastperiod=fastperiod, slowperiod=slowperiod, signalperiod=signalperiod)
+
+
+def adx_from_history(history: pd.DataFrame, days: int = 60, time_period: int = 14) -> pd.DataFrame:
+    """Build ADX history from an existing daily OHLC dataframe."""
+    if history.empty:
+        raise AlphaVantageError("No daily price history available for ADX.")
+
+    adx_df = pd.DataFrame(
+        {
+            "Date": history["Date"],
+            "ADX": calculate_adx(history["High"], history["Low"], history["Close"], window=time_period).round(4),
+        }
+    ).tail(days)
+    adx_df.attrs["source"] = f"{history.attrs.get('source', 'Daily OHLC')} · ADX({time_period})"
+    return adx_df.reset_index(drop=True)
+
+
+def get_adx_history(symbol: str, days: int = 60, time_period: int = 14) -> pd.DataFrame:
+    """Return ADX history calculated from cached daily OHLC."""
+    lookback = max(days + (time_period * 3) + 10, 100)
+    history = get_price_history(symbol, periods=lookback, timeframe="Daily").sort_values("Date")
+    return adx_from_history(history, days=days, time_period=time_period)
+
+
+def get_latest_rsi(symbol: str, time_period: int = 9, timeout: int = 10) -> dict[str, Any]:
+    """Return latest daily RSI calculated from cached daily OHLC."""
+    del timeout  # retained for backward compatibility with screener callers
+    rsi_history = get_rsi_history(symbol, days=1, time_period=time_period)
+    if rsi_history.empty:
+        raise AlphaVantageError(f"No usable RSI data returned for {symbol}.")
+
+    latest = rsi_history.iloc[-1]
+    latest_date = latest["Date"]
+    if hasattr(latest_date, "strftime"):
+        latest_date = latest_date.strftime("%Y-%m-%d")
+    return {
+        "date": str(latest_date),
+        "rsi": round(float(latest["RSI"]), 4),
+        "symbol": symbol,
+    }
+
+
+def _sector_performance_row(
+    sector: str,
+    symbol: str,
+    daily_history: pd.DataFrame,
+    monthly_history: pd.DataFrame,
+) -> dict[str, Any]:
+    """Build one sector ETF performance row."""
+    daily_prices = daily_history.sort_values("Date").reset_index(drop=True)
+    monthly_prices = monthly_history.sort_values("Date").reset_index(drop=True)
+    latest = float(daily_prices["Close"].iloc[-1])
+    one_month_return = _period_return(daily_prices, 21)
+    return {
+        "Sector": sector,
+        "ETF": symbol,
+        "Price": round(latest, 2),
+        "1D %": _period_return(daily_prices, 1),
+        "1W %": _period_return(daily_prices, 5),
+        "1M %": one_month_return,
+        "YTD %": _ytd_return(daily_prices),
+        "1Y %": _monthly_period_return(monthly_prices, 12),
+        "3Y %": _monthly_period_return(monthly_prices, 36),
+        "Momentum": _sector_momentum_label(one_month_return),
+    }
+
+
+def _period_return(prices: pd.DataFrame, periods_back: int) -> float:
+    """Return percentage change from N trading periods ago."""
+    latest = float(prices["Close"].iloc[-1])
+    if len(prices) <= periods_back:
+        base = float(prices["Close"].iloc[0])
+    else:
+        base = float(prices["Close"].iloc[-periods_back - 1])
+    return round(((latest - base) / base) * 100, 2) if base else 0.0
+
+
+def _ytd_return(prices: pd.DataFrame) -> float:
+    """Return year-to-date percentage change from available daily history."""
+    latest_row = prices.iloc[-1]
+    latest = float(latest_row["Close"])
+    latest_year = pd.to_datetime(latest_row["Date"]).year
+    current_year_prices = prices[pd.to_datetime(prices["Date"]).dt.year == latest_year]
+    base = float(current_year_prices["Close"].iloc[0]) if not current_year_prices.empty else float(prices["Close"].iloc[0])
+    return round(((latest - base) / base) * 100, 2) if base else 0.0
+
+
+def _monthly_period_return(prices: pd.DataFrame, months_back: int) -> float:
+    """Return approximate rolling performance from monthly adjusted history."""
+    latest = float(prices["Close"].iloc[-1])
+    if len(prices) <= months_back:
+        base = float(prices["Close"].iloc[0])
+    else:
+        base = float(prices["Close"].iloc[-months_back - 1])
+    return round(((latest - base) / base) * 100, 2) if base else 0.0
+
+
+def _sector_momentum_label(one_month_return: float) -> str:
+    """Return simple sector momentum label from one-month performance."""
+    if one_month_return > 1:
+        return "Bullish"
+    if one_month_return < -1:
+        return "Bearish"
+    return "Neutral"
+
+
+def _fetch_top_gainers_losers() -> dict[str, Any]:
+    """Fetch the shared Alpha Vantage top gainers/losers payload once per cache window."""
+    return _request({"function": "TOP_GAINERS_LOSERS"})
 
 
 def get_top_movers(limit: int = 10) -> dict[str, Any]:
     """Return top gainers and losers from Alpha Vantage."""
-    data = _request({"function": "TOP_GAINERS_LOSERS"})
+    data = _fetch_top_gainers_losers()
     gainers = data.get("top_gainers", [])
     losers = data.get("top_losers", [])
+    most_active = data.get("most_actively_traded", [])
     if not gainers or not losers:
         raise AlphaVantageError("No top movers returned.")
 
     return {
         "last_updated": data.get("last_updated", "Unknown"),
-        "source": "Alpha Vantage Top Gainers/Losers",
+        "source": "Alpha Vantage Top Gainers/Losers"
+        + (" (stale cache)" if data.get("_cache_warning") else ""),
+        "warning": data.get("_cache_warning"),
         "gainers": _normalize_movers(gainers[:limit], "Gainer"),
         "losers": _normalize_movers(losers[:limit], "Loser"),
+        "most_active": _normalize_movers(most_active[:limit], "Most active") if most_active else pd.DataFrame(),
     }
+
+
+def get_market_breadth() -> pd.DataFrame:
+    """Return live market breadth proxies from Alpha Vantage top movers data."""
+    data = _fetch_top_gainers_losers()
+    most_active = data.get("most_actively_traded", [])
+    gainers = data.get("top_gainers", [])
+    losers = data.get("top_losers", [])
+    if not most_active:
+        raise AlphaVantageError("No most-active market breadth data returned.")
+
+    active_rows = [
+        {
+            "ticker": row.get("ticker", ""),
+            "change_pct": _parse_float(row.get("change_percentage")),
+            "volume": _parse_float(row.get("volume")),
+        }
+        for row in most_active
+    ]
+    active_count = len(active_rows)
+    advancers = sum(1 for row in active_rows if row["change_pct"] > 0)
+    decliners = sum(1 for row in active_rows if row["change_pct"] < 0)
+    up_volume = sum(row["volume"] for row in active_rows if row["change_pct"] > 0)
+    down_volume = sum(row["volume"] for row in active_rows if row["change_pct"] < 0)
+    total_volume = up_volume + down_volume
+    average_change = sum(row["change_pct"] for row in active_rows) / active_count if active_count else 0
+    strongest = max(active_rows, key=lambda row: row["change_pct"])
+    weakest = min(active_rows, key=lambda row: row["change_pct"])
+
+    breadth = pd.DataFrame(
+        [
+            {
+                "Indicator": "Most-active advancers / decliners",
+                "Value": f"{advancers} / {decliners}",
+                "Signal": _breadth_signal(advancers - decliners),
+            },
+            {
+                "Indicator": "Most-active advance ratio",
+                "Value": f"{(advancers / active_count * 100):.1f}%" if active_count else "0.0%",
+                "Signal": _breadth_signal(advancers - decliners),
+            },
+            {
+                "Indicator": "Most-active up-volume ratio",
+                "Value": f"{(up_volume / total_volume * 100):.1f}%" if total_volume else "0.0%",
+                "Signal": _breadth_signal(up_volume - down_volume),
+            },
+            {
+                "Indicator": "Average most-active move",
+                "Value": f"{average_change:.2f}%",
+                "Signal": _breadth_signal(average_change),
+            },
+            {
+                "Indicator": "Top gainers / losers available",
+                "Value": f"{len(gainers)} / {len(losers)}",
+                "Signal": "Coverage",
+            },
+            {
+                "Indicator": "Strongest / weakest active",
+                "Value": f"{strongest['ticker']} {strongest['change_pct']:.2f}% / {weakest['ticker']} {weakest['change_pct']:.2f}%",
+                "Signal": "Range",
+            },
+        ]
+    )
+    breadth.attrs["source"] = "Alpha Vantage Top Gainers/Losers breadth proxy"
+    if data.get("_cache_warning"):
+        breadth.attrs["source"] += " (stale cache)"
+        breadth.attrs["warning"] = data["_cache_warning"]
+    breadth.attrs["last_updated"] = data.get("last_updated", "Unknown")
+    return breadth
+
+
+def _breadth_signal(value: float) -> str:
+    """Convert positive/negative breadth proxy values to display labels."""
+    if value > 0:
+        return "Positive"
+    if value < 0:
+        return "Negative"
+    return "Neutral"
 
 
 def _normalize_movers(rows: list[dict[str, Any]], move_type: str) -> pd.DataFrame:
@@ -376,6 +855,93 @@ def get_news_sentiment(ticker: str, limit: int = 8) -> pd.DataFrame:
     news = pd.DataFrame(rows)
     news.attrs["source"] = "Alpha Vantage News Sentiment"
     return news
+
+
+def get_insider_transactions(ticker: str, limit: int = 50) -> pd.DataFrame:
+    """Return recent insider transactions from Alpha Vantage."""
+    data = _request({"function": "INSIDER_TRANSACTIONS", "symbol": ticker})
+    transactions = data.get("data", [])
+    if not transactions:
+        raise AlphaVantageError(f"No insider transactions returned for {ticker}.")
+
+    rows = []
+    for item in transactions[:limit]:
+        shares = _parse_optional_float(item.get("shares"))
+        share_price = _parse_optional_float(item.get("share_price"))
+        transaction_value = shares * share_price if shares is not None and share_price is not None else None
+        rows.append(
+            {
+                "Date": item.get("transaction_date") or "Unknown",
+                "Executive": item.get("executive") or "Unknown",
+                "Title": item.get("executive_title") or "Unknown",
+                "Security": item.get("security_type") or "Unknown",
+                "Type": _normalize_insider_transaction_type(item.get("acquisition_or_disposal")),
+                "Shares": format_large_number(shares) if shares is not None else "-",
+                "Share Price": "-" if share_price is None else f"${share_price:.2f}",
+                "Value": "-" if transaction_value is None else f"${transaction_value:,.0f}",
+            }
+        )
+
+    insider_df = pd.DataFrame(rows)
+    insider_df.attrs["source"] = "Alpha Vantage Insider Transactions"
+    return insider_df
+
+
+def get_historical_options(ticker: str, date: str | None = None) -> pd.DataFrame:
+    """Return normalized historical options contracts from Alpha Vantage."""
+    params = {"function": "HISTORICAL_OPTIONS", "symbol": ticker}
+    if date:
+        params["date"] = date
+
+    data = _request(params)
+    contracts = data.get("data", [])
+    if not contracts:
+        raise AlphaVantageError(f"No historical options returned for {ticker}.")
+
+    rows = []
+    for item in contracts:
+        rows.append(
+            {
+                "Contract ID": item.get("contractID", ""),
+                "Symbol": item.get("symbol", ticker),
+                "Date": pd.to_datetime(item.get("date"), errors="coerce"),
+                "Expiration": pd.to_datetime(item.get("expiration"), errors="coerce"),
+                "Type": str(item.get("type", "")).lower(),
+                "Strike": _parse_optional_float(item.get("strike")),
+                "Last": _parse_optional_float(item.get("last")),
+                "Mark": _parse_optional_float(item.get("mark")),
+                "Bid": _parse_optional_float(item.get("bid")),
+                "Bid Size": _parse_optional_float(item.get("bid_size")),
+                "Ask": _parse_optional_float(item.get("ask")),
+                "Ask Size": _parse_optional_float(item.get("ask_size")),
+                "Volume": _parse_optional_float(item.get("volume")),
+                "Open Interest": _parse_optional_float(item.get("open_interest")),
+                "Implied Volatility": _parse_optional_float(item.get("implied_volatility")),
+                "Delta": _parse_optional_float(item.get("delta")),
+                "Gamma": _parse_optional_float(item.get("gamma")),
+                "Theta": _parse_optional_float(item.get("theta")),
+                "Vega": _parse_optional_float(item.get("vega")),
+                "Rho": _parse_optional_float(item.get("rho")),
+            }
+        )
+
+    options = pd.DataFrame(rows).dropna(subset=["Expiration", "Strike"])
+    if options.empty:
+        raise AlphaVantageError(f"No usable historical options returned for {ticker}.")
+
+    options.attrs["source"] = "Alpha Vantage Historical Options"
+    options.attrs["snapshot_date"] = options["Date"].dropna().max().strftime("%Y-%m-%d")
+    return options
+
+
+def _normalize_insider_transaction_type(value: str | None) -> str:
+    """Map Alpha Vantage acquisition/disposal code to a display label."""
+    normalized = (value or "").upper()
+    if normalized == "A":
+        return "Acquisition"
+    if normalized == "D":
+        return "Disposal"
+    return value or "Unknown"
 
 
 def _ticker_news_sentiment(item: dict[str, Any], ticker: str) -> tuple[str, float | None]:
@@ -485,6 +1051,72 @@ def get_financial_statement(statement_type: str, ticker: str, period: str = "Ann
     return statement
 
 
+def get_latest_earnings_release(ticker: str) -> dict[str, Any]:
+    """Return the latest quarterly earnings release from Alpha Vantage EARNINGS."""
+    data = _request({"function": "EARNINGS", "symbol": ticker})
+    quarterly_earnings = data.get("quarterlyEarnings", [])
+    if not quarterly_earnings:
+        raise AlphaVantageError(f"No earnings releases returned for {ticker}.")
+
+    latest = quarterly_earnings[0]
+    return {
+        "ticker": data.get("symbol", ticker),
+        "reported_date": latest.get("reportedDate") or "Unknown",
+        "fiscal_date_ending": latest.get("fiscalDateEnding") or "Unknown",
+        "reported_eps": _parse_optional_float(latest.get("reportedEPS")),
+        "estimated_eps": _parse_optional_float(latest.get("estimatedEPS")),
+        "surprise": _parse_optional_float(latest.get("surprise")),
+        "surprise_percentage": _parse_optional_float(latest.get("surprisePercentage")),
+        "report_time": latest.get("reportTime") or "Unknown",
+        "source": "Alpha Vantage Earnings",
+    }
+
+
+def get_earnings_calendar(ticker: str, horizon: str = "3month") -> pd.DataFrame:
+    """Return upcoming earnings calendar rows from Alpha Vantage."""
+    calendar = _request_csv(
+        {
+            "function": "EARNINGS_CALENDAR",
+            "symbol": ticker,
+            "horizon": horizon,
+        }
+    )
+    required_columns = {"symbol", "reportDate", "fiscalDateEnding", "estimate", "currency"}
+    if not required_columns.issubset(calendar.columns):
+        raise AlphaVantageError(f"No earnings calendar returned for {ticker}.")
+
+    if calendar.empty:
+        empty = pd.DataFrame(
+            columns=["Ticker", "Company", "Report Date", "Fiscal Date Ending", "EPS Estimate", "Currency"]
+        )
+        empty.attrs["source"] = "Alpha Vantage Earnings Calendar"
+        empty.attrs["horizon"] = horizon
+        empty.attrs["empty_reason"] = (
+            f"Alpha Vantage has no upcoming earnings dates for {ticker} within the selected horizon."
+        )
+        return empty
+
+    normalized = calendar.rename(
+        columns={
+            "symbol": "Ticker",
+            "name": "Company",
+            "reportDate": "Report Date",
+            "fiscalDateEnding": "Fiscal Date Ending",
+            "estimate": "EPS Estimate",
+            "currency": "Currency",
+        }
+    )
+    normalized["Report Date"] = pd.to_datetime(normalized["Report Date"], errors="coerce").dt.date.astype(str)
+    normalized["Fiscal Date Ending"] = pd.to_datetime(
+        normalized["Fiscal Date Ending"], errors="coerce"
+    ).dt.date.astype(str)
+    normalized["EPS Estimate"] = normalized["EPS Estimate"].apply(_format_optional_eps)
+    normalized = normalized[["Ticker", "Company", "Report Date", "Fiscal Date Ending", "EPS Estimate", "Currency"]]
+    normalized.attrs["source"] = "Alpha Vantage Earnings Calendar"
+    normalized.attrs["horizon"] = horizon
+    return normalized
+
+
 def _financial_period_label(report: dict[str, Any], period: str) -> str:
     """Return a compact fiscal period label."""
     fiscal_date = pd.to_datetime(report.get("fiscalDateEnding"))
@@ -501,3 +1133,9 @@ def _format_financial_statement_value(value: str | float | int | None, value_typ
     if value_type == "number":
         return format_large_number(parsed)
     return f"{parsed / 1_000_000:,.2f}"
+
+
+def _format_optional_eps(value: str | float | int | None) -> str:
+    """Format optional EPS values from provider data."""
+    parsed = _parse_optional_float(value)
+    return "-" if parsed is None else f"{parsed:.2f}"

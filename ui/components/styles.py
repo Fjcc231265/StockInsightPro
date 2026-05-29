@@ -1,10 +1,33 @@
 """Global CSS styling for executive dashboard appearance."""
 
+from __future__ import annotations
+
 from utils.constants import COLORS
 
 
-def get_custom_css() -> str:
+def get_custom_css(theme_id: str | None = None) -> str:
     """Return injected CSS for professional financial UI."""
+    if theme_id is None:
+        try:
+            from services.settings_service import get_user_settings
+
+            theme_id = get_user_settings().get("theme_id", "executive_blue")
+        except Exception:  # noqa: BLE001
+            theme_id = "executive_blue"
+    try:
+        from services.settings_service import get_theme_colors
+
+        colors = get_theme_colors(theme_id)
+    except Exception:  # noqa: BLE001 - fallback when settings unavailable at import
+        colors = COLORS
+    compact = False
+    try:
+        from services.settings_service import get_user_settings
+
+        compact = bool(get_user_settings().get("compact_layout", False))
+    except Exception:  # noqa: BLE001
+        pass
+    container_padding = "1rem 1.25rem" if compact else "1.5rem 2rem"
     return f"""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -14,14 +37,14 @@ def get_custom_css() -> str:
         }}
 
         .main .block-container {{
-            padding-top: 1.5rem;
+            padding-top: {container_padding.split()[0]};
             padding-bottom: 2rem;
             max-width: 1400px;
         }}
 
         /* App header (section title only — wordmark is in sidebar) */
         .sip-header {{
-            background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['secondary']} 100%);
+            background: linear-gradient(135deg, {colors['primary']} 0%, {colors['secondary']} 100%);
             color: white;
             padding: 1.15rem 1.5rem;
             border-radius: 10px;
@@ -51,21 +74,21 @@ def get_custom_css() -> str:
         /* Metric cards */
         .sip-metric-card {{
             background: white;
-            border: 1px solid {COLORS['card_border']};
+            border: 1px solid {colors['card_border']};
             border-radius: 8px;
             padding: 0.85rem 1rem;
             box-shadow: 0 1px 3px rgba(0,0,0,0.06);
             height: 100%;
         }}
         .sip-metric-card .label {{
-            color: {COLORS['text_muted']};
+            color: {colors['text_muted']};
             font-size: 0.8rem;
             font-weight: 500;
             text-transform: uppercase;
             letter-spacing: 0.04em;
         }}
         .sip-metric-card .value {{
-            color: {COLORS['primary']};
+            color: {colors['primary']};
             font-size: 1.25rem;
             font-weight: 700;
             margin-top: 0.25rem;
@@ -75,9 +98,9 @@ def get_custom_css() -> str:
             font-size: 0.85rem;
             white-space: nowrap;
         }}
-        .sip-metric-card .delta.positive {{ color: {COLORS['positive']}; }}
-        .sip-metric-card .delta.negative {{ color: {COLORS['negative']}; }}
-        .sip-metric-card .delta.neutral {{ color: {COLORS['neutral']}; }}
+        .sip-metric-card .delta.positive {{ color: {colors['positive']}; }}
+        .sip-metric-card .delta.negative {{ color: {colors['negative']}; }}
+        .sip-metric-card .delta.neutral {{ color: {colors['neutral']}; }}
 
         /* Compact native Streamlit metrics used inside panels */
         [data-testid="stMetricValue"] {{
@@ -94,16 +117,16 @@ def get_custom_css() -> str:
         /* Section panels */
         .sip-panel {{
             background: white;
-            border: 1px solid {COLORS['card_border']};
+            border: 1px solid {colors['card_border']};
             border-radius: 8px;
             padding: 1.25rem;
             margin-bottom: 1rem;
         }}
         .sip-panel-title {{
-            color: {COLORS['primary']};
+            color: {colors['primary']};
             font-weight: 600;
             font-size: 1.1rem;
-            border-bottom: 2px solid {COLORS['accent']};
+            border-bottom: 2px solid {colors['accent']};
             padding-bottom: 0.5rem;
             margin-bottom: 1rem;
         }}
@@ -111,7 +134,7 @@ def get_custom_css() -> str:
         /* Info / TODO callouts */
         .sip-todo {{
             background: #fff8e6;
-            border-left: 4px solid {COLORS['accent']};
+            border-left: 4px solid {colors['accent']};
             padding: 0.75rem 1rem;
             border-radius: 0 6px 6px 0;
             font-size: 0.9rem;
@@ -151,7 +174,7 @@ def get_custom_css() -> str:
         }}
         [data-testid="stSidebar"] .sip-sidebar-brand {{
             font-weight: 700;
-            color: {COLORS['primary']};
+            color: {colors['primary']};
             font-size: 1.35rem;
             line-height: 1.05;
             letter-spacing: -0.03em;

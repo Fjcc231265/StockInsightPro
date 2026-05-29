@@ -23,7 +23,7 @@ def render() -> None:
 
     # Market indices row
     overview = get_market_overview()
-    cols = st.columns(5)
+    cols = st.columns(len(overview))
     for i, row in overview.iterrows():
         with cols[i]:
             render_metric_card(
@@ -35,6 +35,8 @@ def render() -> None:
     if "Source" in overview.columns:
         sources = ", ".join(sorted(overview["Source"].unique()))
         st.caption(f"Index source: {sources}")
+    elif overview.attrs.get("source"):
+        st.caption(f"Index source: {overview.attrs['source']}")
 
     st.divider()
 
@@ -164,6 +166,10 @@ def _render_movers_panel() -> None:
     """Top movers table."""
     movers = get_top_movers_by_direction(limit=10)
     st.caption(f"Source: {movers['source']} · Last updated: {movers['last_updated']}")
+    if movers.get("source", "").startswith("Mock") and movers.get("error"):
+        st.warning(f"Live top movers unavailable: {movers['error']}")
+    elif movers.get("warning"):
+        st.warning(f"Using cached top movers because live refresh failed: {movers['warning']}")
 
     st.markdown("**Top 10 Gainers**")
     st.dataframe(movers["gainers"], use_container_width=True, hide_index=True)

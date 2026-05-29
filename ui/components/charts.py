@@ -10,11 +10,21 @@ from analytics.technical.engine import calculate_rsi, calculate_simple_moving_av
 from utils.constants import COLORS
 
 
-def _base_layout(title: str, height: int = 400) -> dict:
+def _default_chart_height() -> int:
+    try:
+        from services.settings_service import get_user_settings
+
+        return int(get_user_settings().get("chart_height_px", 400))
+    except Exception:  # noqa: BLE001
+        return 400
+
+
+def _base_layout(title: str, height: int | None = None) -> dict:
     """Shared Plotly layout defaults."""
+    resolved_height = height if height is not None else _default_chart_height()
     return dict(
         title=dict(text=title, font=dict(size=14, color=COLORS["primary"])),
-        height=height,
+        height=resolved_height,
         margin=dict(l=40, r=40, t=50, b=40),
         paper_bgcolor="white",
         plot_bgcolor="#fafbfc",
@@ -135,15 +145,21 @@ def volume_bar_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
     return fig
 
 
-def rsi_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
+def rsi_chart(df: pd.DataFrame, ticker: str, time_period: int = 9) -> go.Figure:
     """RSI indicator chart with overbought/oversold zones."""
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=df["Date"], y=df["RSI"], mode="lines", name="RSI(9)", line=dict(color="#6f42c1", width=2))
+        go.Scatter(
+            x=df["Date"],
+            y=df["RSI"],
+            mode="lines",
+            name=f"RSI({time_period})",
+            line=dict(color="#6f42c1", width=2),
+        )
     )
     fig.add_hline(y=70, line_dash="dash", line_color=COLORS["negative"], annotation_text="Overbought")
     fig.add_hline(y=30, line_dash="dash", line_color=COLORS["positive"], annotation_text="Oversold")
-    fig.update_layout(**_base_layout(f"{ticker} — RSI(9)"))
+    fig.update_layout(**_base_layout(f"{ticker} — RSI({time_period})"))
     fig.update_layout(yaxis=dict(range=[0, 100]))
     return fig
 
@@ -176,13 +192,25 @@ def _x_values_for_history(prices: pd.DataFrame) -> pd.Series:
 
 def macd_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
     """MACD line, signal, and histogram."""
+    signal_column = "MACD Signal" if "MACD Signal" in df.columns else "Signal"
+    histogram_column = "MACD Hist" if "MACD Hist" in df.columns else "Histogram"
+    histogram_colors = [
+        COLORS["positive"] if value >= 0 else COLORS["negative"]
+        for value in df[histogram_column]
+    ]
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD", line=dict(color=COLORS["secondary"])))
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal", line=dict(color=COLORS["accent"])))
+    fig.add_trace(go.Scatter(x=df["Date"], y=df[signal_column], name="Signal", line=dict(color=COLORS["accent"])))
     fig.add_trace(
-        go.Bar(x=df["Date"], y=df["Histogram"], name="Histogram", marker_color=COLORS["neutral"], opacity=0.5)
+        go.Bar(x=df["Date"], y=df[histogram_column], name="Histogram", marker_color=histogram_colors, opacity=0.55)
     )
-    fig.update_layout(**_base_layout(f"{ticker} — MACD (Mock)"))
+    fig.add_hline(y=0, line_dash="dash", line_color=COLORS["neutral"], opacity=0.7)
+    fig.update_layout(**_base_layout(f"{ticker} — MACD(12,26,9)"))
+    fig.update_layout(
+        hovermode="x unified",
+        margin=dict(l=40, r=40, t=70, b=80),
+        legend=dict(orientation="h", yanchor="top", y=-0.18, xanchor="center", x=0.5),
+    )
     return fig
 
 
@@ -220,8 +248,13 @@ def open_interest_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
     fig = go.Figure()
     fig.add_trace(go.Bar(x=df["Strike"], y=df["Call OI"], name="Call OI", marker_color=COLORS["positive"]))
     fig.add_trace(go.Bar(x=df["Strike"], y=df["Put OI"], name="Put OI", marker_color=COLORS["negative"]))
-    fig.update_layout(**_base_layout(f"{ticker} — Open Interest by Strike (Mock)", height=380))
-    fig.update_layout(barmode="group")
+    fig.update_layout(**_base_layout(f"{ticker} — Open Interest by Strike", height=380))
+    fig.update_layout(
+        barmode="group",
+        margin=dict(l=40, r=40, t=85, b=45),
+        title=dict(text=f"{ticker} — Open Interest by Strike", font=dict(size=14, color=COLORS["primary"]), y=0.96),
+        legend=dict(orientation="h", yanchor="bottom", y=1.03, xanchor="left", x=0),
+    )
     return fig
 
 
@@ -252,7 +285,7 @@ def gamma_exposure_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
             marker_color=colors,
         )
     )
-    fig.update_layout(**_base_layout(f"{ticker} — Gamma Exposure (Mock)", height=380))
+    fig.update_layout(**_base_layout(f"{ticker} — Gamma Exposure", height=380))
     fig.add_hline(y=0, line_color=COLORS["neutral"], line_dash="dash")
     return fig
 
@@ -260,7 +293,7 @@ def gamma_exposure_chart(df: pd.DataFrame, ticker: str) -> go.Figure:
 def max_pain_chart(df: pd.DataFrame, max_pain: float, ticker: str) -> go.Figure:
     """Open interest chart with a max-pain reference line."""
     fig = open_interest_chart(df, ticker)
-    fig.update_layout(title=dict(text=f"{ticker} — Max Pain Map (Mock)", font=dict(size=14, color=COLORS["primary"])))
+    fig.update_layout(title=dict(text=f"{ticker} — Max Pain Map", font=dict(size=14, color=COLORS["primary"])))
     fig.add_vline(
         x=max_pain,
         line_dash="dash",

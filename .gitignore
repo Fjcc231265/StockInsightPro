@@ -16,6 +16,10 @@ __pycache__/
 # Local secrets
 .env
 
+# Local user data and API cache
+data/cache/
+data/user_settings.json
+
 # OS / IDE
 .DS_Store
 .idea/

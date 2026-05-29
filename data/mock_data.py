@@ -189,6 +189,47 @@ def get_financial_statement(statement_type: str, ticker: str = DEFAULT_TICKER) -
     return pd.DataFrame(data, index=rows)
 
 
+def get_latest_earnings_release(ticker: str = DEFAULT_TICKER) -> dict:
+    """Mock latest earnings release summary."""
+    reported_eps = 2.18 + (hash(ticker) % 18) / 100
+    estimated_eps = reported_eps - 0.07
+    surprise = reported_eps - estimated_eps
+    return {
+        "ticker": ticker,
+        "reported_date": "2026-04-25",
+        "fiscal_date_ending": "2026-03-31",
+        "reported_eps": round(reported_eps, 2),
+        "estimated_eps": round(estimated_eps, 2),
+        "surprise": round(surprise, 2),
+        "surprise_percentage": round((surprise / estimated_eps) * 100, 2),
+        "report_time": "post-market",
+        "source": "Mock fallback",
+    }
+
+
+def get_earnings_calendar(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
+    """Mock upcoming earnings calendar rows."""
+    today = pd.Timestamp.today().normalize()
+    report_dates = pd.bdate_range(start=today + pd.Timedelta(days=12), periods=3, freq="65B")
+    rows = []
+    for index, report_date in enumerate(report_dates):
+        fiscal_date = report_date - pd.offsets.QuarterEnd(startingMonth=3)
+        rows.append(
+            {
+                "Ticker": ticker,
+                "Company": f"{ticker} Inc. (Mock)",
+                "Report Date": report_date.strftime("%Y-%m-%d"),
+                "Fiscal Date Ending": fiscal_date.strftime("%Y-%m-%d"),
+                "EPS Estimate": f"{2.15 + index * 0.08:.2f}",
+                "Currency": "USD",
+            }
+        )
+    calendar = pd.DataFrame(rows)
+    calendar.attrs["source"] = "Mock fallback"
+    calendar.attrs["horizon"] = "12month"
+    return calendar
+
+
 def get_valuation_ratios(ticker: str = DEFAULT_TICKER) -> pd.DataFrame:
     """Mock valuation ratio table."""
     return pd.DataFrame(
@@ -234,10 +275,11 @@ def get_debt_liquidity() -> pd.DataFrame:
     )
 
 
-def get_news_items(ticker: str = DEFAULT_TICKER, count: int = 8) -> pd.DataFrame:
+def get_news_items(ticker: str = DEFAULT_TICKER, limit: int = 8) -> pd.DataFrame:
     """Mock news headlines."""
     # TODO: Integrate news API
-    headlines = [
+    limit = max(int(limit), 1)
+    headline_templates = [
         f"{ticker} beats earnings expectations in Q1",
         f"Analysts raise price target on {ticker}",
         f"{ticker} announces new product line expansion",
@@ -247,12 +289,13 @@ def get_news_items(ticker: str = DEFAULT_TICKER, count: int = 8) -> pd.DataFrame
         "Market volatility rises amid geopolitical headlines",
         f"Institutional investors increase {ticker} holdings",
     ]
+    headlines = [headline_templates[index % len(headline_templates)] for index in range(limit)]
     return pd.DataFrame(
         {
-            "Date": pd.date_range(end=pd.Timestamp.today(), periods=count, freq="D")[::-1],
-            "Headline": headlines[:count],
-            "Source": np.random.choice(["Reuters", "Bloomberg", "CNBC", "WSJ"], count),
-            "Sentiment": np.random.choice(["Positive", "Neutral", "Negative"], count, p=[0.5, 0.35, 0.15]),
+            "Date": pd.date_range(end=pd.Timestamp.today(), periods=limit, freq="D")[::-1],
+            "Headline": headlines,
+            "Source": np.random.choice(["Reuters", "Bloomberg", "CNBC", "WSJ"], limit),
+            "Sentiment": np.random.choice(["Positive", "Neutral", "Negative"], limit, p=[0.5, 0.35, 0.15]),
         }
     )
 
@@ -266,6 +309,41 @@ def get_sentiment_scores() -> pd.DataFrame:
             "Trend": ["↑", "→", "↑", "↓", "↑"],
         }
     )
+
+
+def get_insider_transactions(ticker: str = DEFAULT_TICKER, limit: int = 20) -> pd.DataFrame:
+    """Mock insider transaction table."""
+    names = [
+        "Alex Morgan",
+        "Jordan Lee",
+        "Casey Rivera",
+        "Taylor Chen",
+        "Riley Patel",
+        "Morgan Smith",
+    ]
+    titles = ["CEO", "CFO", "Director", "COO", "General Counsel", "Chief Product Officer"]
+    transaction_types = ["Acquisition", "Disposal", "Disposal", "Acquisition", "Disposal", "Acquisition"]
+    dates = pd.bdate_range(end=pd.Timestamp.today(), periods=max(limit, len(names)))[::-1]
+    rows = []
+    for index in range(min(limit, len(names))):
+        shares = int(1_000 + (index + 1) * 750)
+        share_price = 125 + index * 6.5
+        rows.append(
+            {
+                "Date": dates[index].strftime("%Y-%m-%d"),
+                "Executive": names[index],
+                "Title": titles[index],
+                "Security": "Common Stock",
+                "Type": transaction_types[index],
+                "Shares": f"{shares:,.0f}",
+                "Share Price": f"${share_price:.2f}",
+                "Value": f"${shares * share_price:,.0f}",
+            }
+        )
+
+    insider_df = pd.DataFrame(rows)
+    insider_df.attrs["source"] = "Mock fallback"
+    return insider_df
 
 
 def get_key_risks() -> list[str]:
@@ -437,9 +515,75 @@ def get_market_overview() -> pd.DataFrame:
     """Mock indices for home dashboard."""
     return pd.DataFrame(
         {
-            "Index": ["S&P 500", "NASDAQ", "DOW", "Russell 2000", "VIX"],
-            "Value": [5234.2, 16452.3, 39127.5, 2048.1, 14.8],
-            "Change %": [0.4, 0.7, 0.2, -0.2, -2.3],
+            "Index": ["S&P 500", "NASDAQ", "DOW", "VIX"],
+            "Value": [5234.2, 16452.3, 39127.5, 14.8],
+            "Change %": [0.4, 0.7, 0.2, -2.3],
+        }
+    )
+
+
+def get_sector_performance() -> pd.DataFrame:
+    """Return mock sector performance snapshot."""
+    sectors = [
+        "Technology",
+        "Communication Services",
+        "Consumer Cyclical",
+        "Financial Services",
+        "Healthcare",
+        "Industrials",
+        "Energy",
+        "Consumer Defensive",
+        "Utilities",
+        "Real Estate",
+        "Materials",
+    ]
+    one_day = np.array([1.35, 0.82, -0.34, 0.44, -0.18, 0.28, -1.12, 0.16, -0.42, -0.71, 0.09])
+    one_week = np.array([2.84, 1.92, 0.48, 1.11, -0.62, 0.74, -2.45, 0.31, -0.88, -1.36, 0.22])
+    one_month = np.array([6.15, 4.21, 1.35, 2.74, -0.95, 1.88, -4.16, 0.76, -1.42, -2.71, 0.58])
+    ytd = np.array([18.4, 15.2, 8.6, 9.9, 4.8, 6.7, -3.2, 5.1, 2.2, -1.8, 3.4])
+    return pd.DataFrame(
+        {
+            "Sector": sectors,
+            "1D %": one_day,
+            "1W %": one_week,
+            "1M %": one_month,
+            "YTD %": ytd,
+            "1Y %": np.array([31.6, 24.8, 13.5, 16.2, 8.4, 11.9, -6.1, 7.6, 4.3, -2.8, 6.2]),
+            "3Y %": np.array([78.4, 42.5, 29.1, 35.7, 20.6, 24.8, 11.2, 15.9, 10.4, -8.5, 13.7]),
+            "Momentum": ["Bullish" if value > 1 else "Neutral" if value > -1 else "Bearish" for value in one_month],
+        }
+    )
+
+
+def get_sector_rotation_history(days: int = 60) -> pd.DataFrame:
+    """Return mock RSI history for major sector groups."""
+    dates = pd.bdate_range(end=pd.Timestamp.today(), periods=days)
+    x = np.linspace(0, 3 * np.pi, days)
+    return pd.DataFrame(
+        {
+            "Date": dates,
+            "Technology (XLK)": np.round(55 + np.sin(x) * 9 + np.linspace(0, 7, days), 2),
+            "Financial Services (XLF)": np.round(52 + np.sin(x + 0.8) * 7 + np.linspace(0, 4, days), 2),
+            "Healthcare (XLV)": np.round(49 + np.cos(x) * 6 + np.linspace(0, 2, days), 2),
+            "Energy (XLE)": np.round(47 + np.sin(x + 1.6) * 10 + np.linspace(-2, 3, days), 2),
+            "Utilities (XLU)": np.round(45 + np.cos(x + 0.5) * 5 + np.linspace(1, 0, days), 2),
+        }
+    )
+
+
+def get_market_breadth() -> pd.DataFrame:
+    """Return mock market breadth indicators."""
+    return pd.DataFrame(
+        {
+            "Indicator": [
+                "Advancers / Decliners",
+                "Stocks above 50D MA",
+                "Stocks above 200D MA",
+                "New highs / New lows",
+                "Up volume ratio",
+            ],
+            "Value": ["1.42x", "62.5%", "58.1%", "2.15x", "57.8%"],
+            "Signal": ["Positive", "Positive", "Neutral", "Positive", "Neutral"],
         }
     )
 

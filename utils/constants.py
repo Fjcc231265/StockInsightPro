@@ -20,6 +20,7 @@ COLORS = {
 # Main navigation sections (sidebar)
 MAIN_SECTIONS = [
     "Home Dashboard",
+    "Market & Sector Analysis",
     "Technical Analysis",
     "Fundamental Analysis",
     "News & Sentiment",
@@ -31,6 +32,12 @@ MAIN_SECTIONS = [
 
 # Submenus keyed by main section
 SUBMENUS = {
+    "Market & Sector Analysis": [
+        "Market overview",
+        "Sector performance",
+        "Sector rotation",
+        "Breadth and movers",
+    ],
     "Technical Analysis": [
         "Price chart",
         "Moving averages",
@@ -44,6 +51,8 @@ SUBMENUS = {
         "Income statement",
         "Balance sheet",
         "Cash flow statement",
+        "Latest earnings release",
+        "Earnings calendar",
         "Valuation ratios",
         "Growth metrics",
         "Profitability metrics",
@@ -52,6 +61,7 @@ SUBMENUS = {
     "News & Sentiment": [
         "Latest news",
         "Sentiment score",
+        "Insider transactions",
         "Key risks",
         "Market catalysts",
         "AI summary placeholder",
@@ -75,9 +85,7 @@ SUBMENUS = {
         "Compare stocks",
     ],
     "Reports": [
-        "Generate technical report",
-        "Generate fundamental report",
-        "Combined investment thesis",
+        "AI summary report",
         "Export placeholder",
     ],
     "Settings": [

@@ -20,13 +20,28 @@ import streamlit as st
 from ui.components.layout import render_app_header
 from ui.components.sidebar import render_sidebar
 from ui.components.styles import get_custom_css
-from ui.pages import fundamental, home, news, options_intelligence, portfolio, reports, settings, technical
+from ui.pages import (
+    fundamental,
+    home,
+    market_sector,
+    news,
+    options_intelligence,
+    portfolio,
+    reports,
+    settings,
+    technical,
+)
 from services.market_data_service import get_market_data_status
+from services.settings_service import load_user_settings
 from utils.branding import LOGO_SIDEBAR
+from utils.config import load_dotenv_if_present
 from utils.constants import APP_NAME
 
 # Browser tab icon: use logo when available
 _page_icon = str(LOGO_SIDEBAR) if LOGO_SIDEBAR.exists() else "📈"
+
+load_dotenv_if_present()
+_app_settings = load_user_settings()
 
 # ── Page configuration (must be first Streamlit command) ──────────────────────
 st.set_page_config(
@@ -37,6 +52,7 @@ st.set_page_config(
 )
 
 # ── Global styling ────────────────────────────────────────────────────────────
+# Theme is resolved inside get_custom_css() from user settings (no positional arg for Streamlit reload safety).
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # ── Sidebar navigation ────────────────────────────────────────────────────────
@@ -45,6 +61,7 @@ main_section, submenu = render_sidebar()
 # ── Main content router ─────────────────────────────────────────────────────────
 PAGE_REGISTRY = {
     "Home Dashboard": (home.render, False),
+    "Market & Sector Analysis": (market_sector.render, True),
     "Technical Analysis": (technical.render, True),
     "Fundamental Analysis": (fundamental.render, True),
     "News & Sentiment": (news.render, True),
@@ -60,7 +77,9 @@ render_app_header(main_section)
 page_entry = PAGE_REGISTRY.get(main_section)
 if page_entry:
     page_renderer, uses_submenu = page_entry
-    page_renderer(submenu) if uses_submenu else page_renderer()
+    loading_label = f"Loading {main_section}" + (f" → {submenu}" if submenu else "")
+    with st.spinner(f"{loading_label}..."):
+        page_renderer(submenu) if uses_submenu else page_renderer()
 else:
     st.error("Unknown section. Please select a menu item from the sidebar.")
 

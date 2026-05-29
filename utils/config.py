@@ -11,10 +11,16 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = PROJECT_ROOT / ".env"
+_DOTENV_LOADED = False
 
 
 def load_dotenv_if_present() -> None:
     """Load simple KEY=VALUE pairs from `.env` into process environment."""
+    global _DOTENV_LOADED
+    if _DOTENV_LOADED:
+        return
+    _DOTENV_LOADED = True
+
     if not ENV_FILE.exists():
         return
 
