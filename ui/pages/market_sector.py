@@ -66,14 +66,28 @@ def _market_overview() -> None:
     st.divider()
 
     st.markdown("**Breadth & Top Movers**")
-    _render_breadth_and_movers()
+    st.caption("Load this section only when needed because it may refresh live Alpha Vantage mover data.")
+    if st.button("Load breadth and top movers", key="market_overview_load_breadth"):
+        st.session_state.market_overview_show_breadth = True
+    if st.session_state.get("market_overview_show_breadth", False):
+        _render_breadth_and_movers()
     st.divider()
+
+    st.markdown("**Sector Performance**")
+    st.caption("Load sector performance only when needed; cold refresh can require multiple sector ETF calls.")
+    if st.button("Load sector performance", key="market_overview_load_sector"):
+        st.session_state.market_overview_show_sector = True
+        if "sector_performance_df" not in st.session_state:
+            _load_sector_performance()
+
+    if not st.session_state.get("market_overview_show_sector", False):
+        st.info("Sector performance is available on demand, or directly from the Sector performance submenu.")
+        return
 
     if "sector_performance_df" not in st.session_state:
         _load_sector_performance()
 
     sector_df = _format_sector_performance(st.session_state.sector_performance_df)
-    st.markdown("**Sector Performance**")
     st.caption(f"Sector source: {sector_df.attrs.get('source', 'Unknown')} · cached snapshot")
     chart_df = sector_df.sort_values("1D %", ascending=True)
     st.plotly_chart(_sector_performance_chart(chart_df, "1D %"), use_container_width=True)

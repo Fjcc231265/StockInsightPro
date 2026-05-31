@@ -161,6 +161,13 @@ def _format_optional_ratio_percent(value: object) -> str:
 
 def _render_movers_panel() -> None:
     """Top movers table."""
+    if not st.session_state.get("home_show_top_movers", False):
+        if st.button("Load top movers", key="home_load_top_movers"):
+            st.session_state.home_show_top_movers = True
+            st.rerun()
+        st.caption("Top movers are loaded on demand to avoid live API calls during simple navigation.")
+        return
+
     movers = get_top_movers_by_direction(limit=10)
     st.caption(f"Source: {movers['source']} · Last updated: {movers['last_updated']}")
     if movers.get("source", "").startswith("Mock") and movers.get("error"):

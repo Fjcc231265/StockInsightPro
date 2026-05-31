@@ -14,9 +14,58 @@ from services.options_data_service import get_options_chain
 from ui.components.page_router import render_submenu_page
 from utils.constants import COLORS
 
+_SIMULATOR_TOOLKIT: dict[str, str] = {
+    "implied_volatility": (
+        "Market-implied expected volatility for this option, as an annualized percentage. "
+        "Higher IV means higher option premiums."
+    ),
+    "days_to_expiration": "Calendar days until the option expires. Time decay accelerates near expiration.",
+    "scenario_days_elapsed": (
+        "How many days pass before the scenario is priced. Remaining time = days to expiration minus this value. "
+        "Used with IV change for before-expiration payoff curves."
+    ),
+    "iv_change_vol_points": (
+        "How much implied volatility (IV) shifts for the scenario, in percentage points—not a percent-of-percent change. "
+        "Example: base IV 35% and +5 vol points → scenario IV 40%. "
+        "Long options usually gain when IV rises; short options usually lose (vega)."
+    ),
+    "risk_free_rate": "Annual risk-free interest rate used in Black-Scholes pricing (affects rho and carry).",
+    "dividend_yield": "Annual dividend yield on the underlying stock used in Black-Scholes pricing.",
+    "option_order_commission": "Flat broker fee charged once per option order (entry and again on exit).",
+    "option_contract_fee": "Per-contract fee charged by the broker on each option order (entry and exit).",
+    "valuation_model": (
+        "European uses Black-Scholes and assumes exercise only at expiration. "
+        "American uses a binomial tree approximation that allows early exercise before expiration."
+    ),
+    "simulation_mode": (
+        "At expiration: intrinsic value only. Before expiration / Greeks: selected valuation model with time left, IV shift, and rates."
+    ),
+    "price_move_scenario": (
+        "Starts at 0%. Move right for positive price scenarios and left for negative price scenarios."
+    ),
+    "strategy_template": (
+        "Starter layouts only. Covered call, protective put, collar, and Custom include stock plus options. "
+        "Spreads, straddles, and butterflies are options-only templates. You can always edit the table below "
+        "to add Stock, Call, or Put rows and build any combination."
+    ),
+}
+
+_STRATEGY_TEMPLATE_HINTS: dict[str, str] = {
+    "Covered call": "Stock + short call (income on shares you own).",
+    "Protective put": "Stock + long put (downside insurance).",
+    "Collar": "Stock + long put + short call (defined risk band).",
+    "Bull call spread": "Options only: long call + short call.",
+    "Bear put spread": "Options only: long put + short put.",
+    "Long straddle": "Options only: long call + long put (same strike).",
+    "Long call butterfly": "Options only: three call legs.",
+    "Iron butterfly": "Options only: four option legs.",
+    "Custom": "Start here for any mix — stock plus one or more calls/puts.",
+}
+
 
 def render(submenu: str) -> None:
     """Route education submenu."""
+    _render_simulator_input_highlight_style()
     handlers = {
         "Learning roadmap": _learning_roadmap,
         "Rules playbook": _rules_playbook,
@@ -31,6 +80,84 @@ def render(submenu: str) -> None:
         handlers,
         default_handler=_learning_roadmap,
         subtitle="Learn market basics, options mechanics, and risk using interactive examples.",
+    )
+
+
+def _render_simulator_input_highlight_style() -> None:
+    """Highlight editable simulator number fields on the Education page."""
+    st.markdown(
+        """
+<style>
+div[data-testid="stNumberInput"] input {
+    background: #fff4bf !important;
+    border: 1px solid #e4b100 !important;
+    box-shadow: 0 0 0 1px rgba(228, 177, 0, 0.14) !important;
+}
+
+div[data-testid="stNumberInput"] label p::after {
+    content: " editable";
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: #fff4bf;
+    color: #6b5200;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.sip-editable-note {
+    margin: 0.35rem 0 1rem 0;
+    padding: 0.65rem 0.85rem;
+    border-left: 5px solid #e4b100;
+    background: #fff9df;
+    border-radius: 0.45rem;
+    color: #3f3420;
+    font-size: 0.92rem;
+}
+
+.sip-editable-table-note {
+    margin: 0.6rem 0 0.35rem 0;
+    padding: 0.7rem 0.85rem;
+    border: 2px solid #e4b100;
+    background: #fff4bf;
+    border-radius: 0.55rem;
+    color: #3f3420;
+    font-weight: 700;
+}
+
+div[data-testid="stDataFrame"],
+div[data-testid="stDataEditor"] {
+    background: #fff4bf !important;
+    border: 2px solid #e4b100 !important;
+    border-radius: 0.65rem !important;
+    padding: 0.45rem !important;
+    box-shadow: 0 0 0 2px rgba(228, 177, 0, 0.12) !important;
+}
+
+div[data-testid="stDataFrame"] [role="grid"],
+div[data-testid="stDataEditor"] [role="grid"],
+div[data-testid="stDataFrame"] canvas,
+div[data-testid="stDataEditor"] canvas {
+    background-color: #fff9df !important;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_editable_assumption_note() -> None:
+    """Explain why simulator inputs are highlighted."""
+    st.markdown(
+        """
+<div class="sip-editable-note">
+Yellow fields are editable assumptions. Change these numbers to test different prices, strikes,
+premiums, volatility, time, rates, contract counts, and commissions.
+</div>
+""",
+        unsafe_allow_html=True,
     )
 
 
@@ -100,6 +227,7 @@ def _rules_playbook() -> None:
 def _stock_pnl_simulator() -> None:
     """Render long/short stock P&L simulator."""
     st.markdown("### Stock P&L simulator")
+    _render_editable_assumption_note()
     col1, col2, col3 = st.columns(3)
     with col1:
         entry_price = st.number_input("Entry price", min_value=0.01, value=100.0, step=1.0)
@@ -138,20 +266,22 @@ def _stock_pnl_simulator() -> None:
         frame,
         key="stock_pnl_selected_scenario",
     )
-    st.caption(f"Round-trip commission estimate included in P&L: **${round_trip_commission:,.2f}**.")
+    st.caption(f"Round-trip commission estimate included in P&L: **\\${round_trip_commission:,.2f}**.")
 
 
 def _options_pnl_simulator() -> None:
     """Render Greek-aware single-leg options P&L simulator."""
     st.markdown("### Options P&L simulator")
+    _render_editable_assumption_note()
     st.caption(
-        "Simulate a single option using editable market inputs, Black-Scholes Greeks, implied volatility, "
+        "Simulate a single option using editable market inputs, model-based Greeks, implied volatility, "
         "time decay, rates, and broker commissions."
     )
 
     ticker = st.session_state.selected_ticker
     _render_chain_defaults_loader(ticker, "single_option")
     defaults = st.session_state.get("education_single_option_defaults", {})
+    reference_chain = st.session_state.get("education_single_option_chain_full")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -162,20 +292,33 @@ def _options_pnl_simulator() -> None:
             index=0 if defaults.get("option_type", "Call") == "Call" else 1,
         )
         action = st.radio("Action", ["Buy", "Sell"], horizontal=True)
+    reference_defaults = _render_single_option_reference_strike_selector(
+        reference_chain,
+        option_type,
+        float(defaults.get("strike", 105.0)),
+    )
+    input_defaults = {**defaults, **reference_defaults}
     with col2:
         stock_price = st.number_input(
             "Current stock price",
             min_value=0.01,
-            value=float(defaults.get("stock_price", 100.0)),
+            value=float(input_defaults.get("stock_price", 100.0)),
             step=1.0,
         )
-        strike = st.number_input("Strike", min_value=0.01, value=float(defaults.get("strike", 105.0)), step=1.0)
+        strike = st.number_input(
+            "Strike",
+            min_value=0.01,
+            value=float(input_defaults.get("strike", 105.0)),
+            step=1.0,
+            key=f"single_option_strike_{option_type}_{input_defaults.get('strike', 105.0)}",
+        )
     with col3:
         premium = st.number_input(
             "Entry premium per share",
             min_value=0.01,
-            value=float(defaults.get("premium", 3.0)),
+            value=float(input_defaults.get("premium", 3.0)),
             step=0.25,
+            key=f"single_option_premium_{option_type}_{input_defaults.get('strike', 105.0)}",
         )
         contracts = st.number_input("Contracts", min_value=1, value=1, step=1)
 
@@ -184,10 +327,18 @@ def _options_pnl_simulator() -> None:
         implied_volatility = st.number_input(
             "Implied volatility (%)",
             min_value=0.01,
-            value=float(defaults.get("implied_volatility", 35.0)),
+            value=float(input_defaults.get("implied_volatility", 35.0)),
             step=1.0,
+            help=_SIMULATOR_TOOLKIT["implied_volatility"],
+            key=f"single_option_iv_{option_type}_{input_defaults.get('strike', 105.0)}",
         )
-        days_to_expiration = st.number_input("Days to expiration", min_value=0, value=30, step=1)
+        days_to_expiration = st.number_input(
+            "Days to expiration",
+            min_value=0,
+            value=30,
+            step=1,
+            help=_SIMULATOR_TOOLKIT["days_to_expiration"],
+        )
     with greek_col2:
         scenario_days_elapsed = st.number_input(
             "Simulate after days elapsed",
@@ -195,17 +346,59 @@ def _options_pnl_simulator() -> None:
             max_value=int(days_to_expiration),
             value=min(7, int(days_to_expiration)),
             step=1,
+            help=_SIMULATOR_TOOLKIT["scenario_days_elapsed"],
         )
-        volatility_change = st.number_input("IV change for scenario (vol points)", value=0.0, step=1.0)
+        volatility_change = st.number_input(
+            "IV change for scenario (vol points)",
+            value=0.0,
+            step=1.0,
+            help=_SIMULATOR_TOOLKIT["iv_change_vol_points"],
+        )
     with greek_col3:
-        risk_free_rate = st.number_input("Risk-free rate (%)", min_value=0.0, value=4.5, step=0.25)
-        dividend_yield = st.number_input("Dividend yield (%)", min_value=0.0, value=0.0, step=0.25)
+        valuation_model = st.selectbox(
+            "Valuation model",
+            ["European (Black-Scholes)", "American (binomial tree)"],
+            help=_SIMULATOR_TOOLKIT["valuation_model"],
+        )
+        risk_free_rate = st.number_input(
+            "Risk-free rate (%)",
+            min_value=0.0,
+            value=4.5,
+            step=0.25,
+            help=_SIMULATOR_TOOLKIT["risk_free_rate"],
+        )
+        dividend_yield = st.number_input(
+            "Dividend yield (%)",
+            min_value=0.0,
+            value=0.0,
+            step=0.25,
+            help=_SIMULATOR_TOOLKIT["dividend_yield"],
+        )
+
+    scenario_iv_pct = implied_volatility + volatility_change
+    st.caption(
+        f"Scenario pricing uses **{_valuation_model_label(valuation_model)}**, **{scenario_iv_pct:.1f}% IV** "
+        f"({implied_volatility:.1f}% base {'+' if volatility_change >= 0 else ''}{volatility_change:.1f} vol points) "
+        f"with **{max(int(days_to_expiration) - int(scenario_days_elapsed), 0)}** days remaining."
+    )
 
     fee_col1, fee_col2 = st.columns(2)
     with fee_col1:
-        option_order_commission = st.number_input("Option commission per order ($)", min_value=0.0, value=0.0, step=0.50)
+        option_order_commission = st.number_input(
+            "Option commission per order ($)",
+            min_value=0.0,
+            value=0.0,
+            step=0.50,
+            help=_SIMULATOR_TOOLKIT["option_order_commission"],
+        )
     with fee_col2:
-        option_contract_fee = st.number_input("Per-contract fee ($)", min_value=0.0, value=0.65, step=0.05)
+        option_contract_fee = st.number_input(
+            "Per-contract fee ($)",
+            min_value=0.0,
+            value=0.65,
+            step=0.05,
+            help=_SIMULATOR_TOOLKIT["option_contract_fee"],
+        )
 
     prices = _price_range(stock_price)
     remaining_days = max(int(days_to_expiration) - int(scenario_days_elapsed), 0)
@@ -213,7 +406,16 @@ def _options_pnl_simulator() -> None:
     direction_sign = 1 if action == "Buy" else -1
     round_trip_commission = _option_round_trip_commission(int(contracts), option_order_commission, option_contract_fee)
     values = [
-        _option_model_value(option_type, price, strike, remaining_days, scenario_iv, risk_free_rate / 100, dividend_yield / 100)
+        _option_model_value(
+            option_type,
+            price,
+            strike,
+            remaining_days,
+            scenario_iv,
+            risk_free_rate / 100,
+            dividend_yield / 100,
+            valuation_model,
+        )
         for price in prices
     ]
     pnl = [(value - premium) * 100 * contracts * direction_sign - round_trip_commission for value in values]
@@ -227,7 +429,7 @@ def _options_pnl_simulator() -> None:
 
     break_even = strike + premium if option_type == "Call" else strike - premium
     max_loss = premium * 100 * contracts + round_trip_commission if action == "Buy" else "Undefined / strategy dependent"
-    greeks = _black_scholes_greeks(
+    greeks = _option_model_greeks(
         option_type,
         stock_price,
         strike,
@@ -235,12 +437,13 @@ def _options_pnl_simulator() -> None:
         implied_volatility / 100,
         risk_free_rate / 100,
         dividend_yield / 100,
+        valuation_model,
     )
     _render_option_greeks(greeks, int(contracts), direction_sign)
     st.info(
-        f"Expiration break-even before commissions: **${break_even:.2f}**. "
+        f"Expiration break-even before commissions: **\\${break_even:.2f}**. "
         f"Modeled max loss for bought options: **{_format_money_or_text(max_loss)}**. "
-        f"Round-trip commission included: **${round_trip_commission:,.2f}**."
+        f"Round-trip commission included: **\\${round_trip_commission:,.2f}**."
     )
     _render_option_variable_explanations()
 
@@ -248,9 +451,11 @@ def _options_pnl_simulator() -> None:
 def _strategy_payoff_lab() -> None:
     """Render combined stock and options payoff simulator for multi-leg strategies."""
     st.markdown("### Strategy payoff lab")
+    _render_editable_assumption_note()
     st.caption(
         "Preview net P&L for stocks, options, and combined positions. "
-        "Green is profitable, yellow is near break-even, and red is loss."
+        "You are not limited to one option type: each row in the strategy table is one leg "
+        "(Stock, Call, or Put). Green is profitable, yellow is near break-even, and red is loss."
     )
 
     ticker = st.session_state.selected_ticker
@@ -259,6 +464,7 @@ def _strategy_payoff_lab() -> None:
     preset = st.selectbox(
         "Strategy template",
         [
+            "Custom",
             "Covered call",
             "Protective put",
             "Collar",
@@ -267,9 +473,16 @@ def _strategy_payoff_lab() -> None:
             "Long straddle",
             "Long call butterfly",
             "Iron butterfly",
-            "Custom",
         ],
+        index=0,
+        help=_SIMULATOR_TOOLKIT["strategy_template"],
     )
+    st.caption(_STRATEGY_TEMPLATE_HINTS.get(preset, ""))
+    if preset in {"Bull call spread", "Bear put spread", "Long straddle", "Long call butterfly", "Iron butterfly"}:
+        st.info(
+            "This template is **options-only**. To add stock, choose **Custom**, **Covered call**, "
+            "**Protective put**, or **Collar** — or add a **Stock** row in the table below (+ button)."
+        )
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -282,7 +495,15 @@ def _strategy_payoff_lab() -> None:
     sim_col1, sim_col2, sim_col3 = st.columns(3)
     with sim_col1:
         simulation_mode = st.radio("Simulation mode", ["At expiration", "Before expiration / Greeks"], horizontal=True)
-        days_to_expiration = st.number_input("Days to expiration", min_value=0, value=30, step=1, key="strategy_dte")
+        days_to_expiration = st.number_input(
+            "Days to expiration",
+            min_value=0,
+            value=30,
+            step=1,
+            key="strategy_dte",
+            help=_SIMULATOR_TOOLKIT["days_to_expiration"],
+        )
+        st.caption(_SIMULATOR_TOOLKIT["simulation_mode"])
     with sim_col2:
         scenario_days_elapsed = st.number_input(
             "Simulate after days elapsed",
@@ -291,11 +512,48 @@ def _strategy_payoff_lab() -> None:
             value=min(7, int(days_to_expiration)),
             step=1,
             key="strategy_elapsed",
+            help=_SIMULATOR_TOOLKIT["scenario_days_elapsed"],
         )
-        volatility_change = st.number_input("IV change for scenario (vol points)", value=0.0, step=1.0, key="strategy_iv_shift")
+        volatility_change = st.number_input(
+            "IV change for scenario (vol points)",
+            value=0.0,
+            step=1.0,
+            key="strategy_iv_shift",
+            help=_SIMULATOR_TOOLKIT["iv_change_vol_points"],
+        )
     with sim_col3:
-        risk_free_rate = st.number_input("Risk-free rate (%)", min_value=0.0, value=4.5, step=0.25, key="strategy_rate")
-        dividend_yield = st.number_input("Dividend yield (%)", min_value=0.0, value=0.0, step=0.25, key="strategy_dividend")
+        risk_free_rate = st.number_input(
+            "Risk-free rate (%)",
+            min_value=0.0,
+            value=4.5,
+            step=0.25,
+            key="strategy_rate",
+            help=_SIMULATOR_TOOLKIT["risk_free_rate"],
+        )
+        dividend_yield = st.number_input(
+            "Dividend yield (%)",
+            min_value=0.0,
+            value=0.0,
+            step=0.25,
+            key="strategy_dividend",
+            help=_SIMULATOR_TOOLKIT["dividend_yield"],
+        )
+    if simulation_mode == "Before expiration / Greeks":
+        remaining_preview = max(int(days_to_expiration) - int(scenario_days_elapsed), 0)
+        valuation_model = st.selectbox(
+            "Valuation model",
+            ["European (Black-Scholes)", "American (binomial tree)"],
+            key="strategy_valuation_model",
+            help=_SIMULATOR_TOOLKIT["valuation_model"],
+        )
+        iv_note = (
+            f"Each option leg uses **{_valuation_model_label(valuation_model)}**, its **IV %** plus "
+            f"**{volatility_change:+.0f}** vol points at scenario time "
+            f"with **{remaining_preview}** days remaining."
+        )
+        st.caption(iv_note)
+    else:
+        valuation_model = "Expiration intrinsic value"
 
     fee_col1, fee_col2, fee_col3, fee_col4 = st.columns(4)
     with fee_col1:
@@ -303,25 +561,137 @@ def _strategy_payoff_lab() -> None:
     with fee_col2:
         stock_per_share_fee = st.number_input("Stock per-share fee ($)", min_value=0.0, value=0.0, step=0.005, format="%.4f")
     with fee_col3:
-        option_order_commission = st.number_input("Option commission/order ($)", min_value=0.0, value=0.0, step=0.50)
+        option_order_commission = st.number_input(
+            "Option commission/order ($)",
+            min_value=0.0,
+            value=0.0,
+            step=0.50,
+            help=_SIMULATOR_TOOLKIT["option_order_commission"],
+        )
     with fee_col4:
-        option_contract_fee = st.number_input("Option per-contract fee ($)", min_value=0.0, value=0.65, step=0.05)
+        option_contract_fee = st.number_input(
+            "Option per-contract fee ($)",
+            min_value=0.0,
+            value=0.65,
+            step=0.05,
+            help=_SIMULATOR_TOOLKIT["option_contract_fee"],
+        )
 
+    st.markdown("**Strategy legs**")
+    st.caption(
+        "One row = one position. For option contracts, set **Instrument** to Call or Put, "
+        "set **Action** to Buy or Sell, and set **Qty** to the number of contracts. "
+        "Use **+** to add more legs. Stock rows use **Qty** as share count."
+    )
+    custom_share_count = int(share_lot)
+    custom_call_contracts = int(contract_lot)
+    custom_put_contracts = int(contract_lot)
+    if preset == "Custom":
+        custom_col1, custom_col2, custom_col3 = st.columns(3)
+        with custom_col1:
+            custom_share_count = st.number_input(
+                "Custom stock shares",
+                min_value=0,
+                value=int(share_lot),
+                step=10,
+                help="Number of shares in the Stock row. Set to 0 if you do not want stock.",
+            )
+        with custom_col2:
+            custom_call_contracts = st.number_input(
+                "Custom call contracts",
+                min_value=0,
+                value=int(contract_lot),
+                step=1,
+                help="Number of call option contracts in the Custom call row.",
+            )
+        with custom_col3:
+            custom_put_contracts = st.number_input(
+                "Custom put contracts",
+                min_value=0,
+                value=int(contract_lot),
+                step=1,
+                help="Number of put option contracts in the Custom put row.",
+            )
+        st.caption("These yellow Custom controls seed the Qty column below. In the table, Qty means contracts for Call/Put rows.")
     default_legs = _strategy_template_legs(preset, stock_price, int(share_lot), int(contract_lot))
+    if preset == "Custom":
+        default_legs = [
+            leg
+            for leg in _strategy_template_legs(
+                preset,
+                stock_price,
+                int(custom_share_count),
+                int(max(custom_call_contracts, custom_put_contracts, 1)),
+            )
+            if not (
+                (leg["Instrument"] == "Stock" and int(custom_share_count) == 0)
+                or (leg["Instrument"] == "Call" and int(custom_call_contracts) == 0)
+                or (leg["Instrument"] == "Put" and int(custom_put_contracts) == 0)
+            )
+        ]
+        for leg in default_legs:
+            if leg["Instrument"] == "Call":
+                leg["Quantity"] = int(custom_call_contracts)
+            elif leg["Instrument"] == "Put":
+                leg["Quantity"] = int(custom_put_contracts)
+    st.markdown(
+        """
+<div class="sip-editable-table-note">
+Editable yellow strategy table: change Instrument (Stock/Call/Put), Buy / Sell, Qty,
+Strike, Premium, and IV %. Use the + row control to add more stock or option legs.
+</div>
+""",
+        unsafe_allow_html=True,
+    )
     edited_legs = st.data_editor(
         pd.DataFrame(default_legs),
         use_container_width=True,
         hide_index=True,
         num_rows="dynamic",
         column_config={
-            "Instrument": st.column_config.SelectboxColumn("Instrument", options=["Stock", "Call", "Put"], required=True),
-            "Action": st.column_config.SelectboxColumn("Action", options=["Buy", "Sell"], required=True),
-            "Quantity": st.column_config.NumberColumn("Quantity", min_value=0, step=1, required=True),
-            "Strike": st.column_config.NumberColumn("Strike", min_value=0.0, step=1.0),
-            "Premium": st.column_config.NumberColumn("Premium", min_value=0.0, step=0.25),
-            "IV %": st.column_config.NumberColumn("IV %", min_value=0.01, step=1.0),
+            "Instrument": st.column_config.SelectboxColumn(
+                "Instrument",
+                options=["Stock", "Call", "Put"],
+                required=True,
+                help="Choose Stock for shares, Call for call contracts, or Put for put contracts.",
+            ),
+            "Action": st.column_config.SelectboxColumn(
+                "Buy / Sell",
+                options=["Buy", "Sell"],
+                required=True,
+                help="Buy means long the shares/contracts. Sell means short the shares/contracts.",
+            ),
+            "Quantity": st.column_config.NumberColumn(
+                "Qty (shares/contracts)",
+                min_value=0,
+                step=1,
+                required=True,
+                help="For Stock rows, quantity is shares. For Call or Put rows, quantity is contracts.",
+            ),
+            "Strike": st.column_config.NumberColumn(
+                "Strike (options)",
+                min_value=0.0,
+                step=1.0,
+                help="Option strike price. Stock rows can leave this at 0.",
+            ),
+            "Premium": st.column_config.NumberColumn(
+                "Premium/contract share",
+                min_value=0.0,
+                step=0.25,
+                help="Option premium per share. A 3.00 premium equals $300 per standard contract.",
+            ),
+            "IV %": st.column_config.NumberColumn(
+                "IV % (options)",
+                min_value=0.01,
+                step=1.0,
+                help="Implied volatility for this option leg.",
+            ),
         },
         key=f"strategy_legs_{preset}_{stock_price}_{share_lot}_{contract_lot}_{simulation_mode}",
+    )
+    st.caption(
+        "Example: to buy 2 call contracts, use Instrument = Call, Buy / Sell = Buy, "
+        "Qty = 2, then enter Strike, Premium, and IV %. Net payoff sums every row in the table."
     )
 
     valid_legs = _normalize_strategy_legs(edited_legs)
@@ -335,6 +705,7 @@ def _strategy_payoff_lab() -> None:
         "days_to_expiration": int(days_to_expiration),
         "remaining_days": max(int(days_to_expiration) - int(scenario_days_elapsed), 0),
         "volatility_change": float(volatility_change),
+        "valuation_model": valuation_model,
         "risk_free_rate": risk_free_rate / 100,
         "dividend_yield": dividend_yield / 100,
         "stock_order_commission": float(stock_order_commission),
@@ -419,6 +790,9 @@ def _render_chain_defaults_loader(ticker: str, context: str) -> None:
                 defaults["stock_price"] = float(quote["price"])
                 if context == "single_option":
                     st.session_state["education_single_option_defaults"] = defaults
+                    st.session_state["education_single_option_chain_full"] = chain
+                else:
+                    st.session_state[f"education_{context}_chain_full"] = chain
                 st.session_state[f"education_{context}_chain_reference"] = reference
                 st.success(f"Loaded {contract_type.lower()} reference from {chain.attrs.get('source', 'options chain')}.")
                 st.rerun()
@@ -429,6 +803,48 @@ def _render_chain_defaults_loader(ticker: str, context: str) -> None:
             st.dataframe(reference, use_container_width=True, hide_index=True)
 
 
+def _render_single_option_reference_strike_selector(
+    chain: pd.DataFrame | None,
+    option_type: str,
+    default_strike: float,
+) -> dict:
+    """Render real-chain strike selector and return the matching market defaults."""
+    if chain is None or chain.empty:
+        return {}
+
+    bid_col = f"{option_type} Bid"
+    ask_col = f"{option_type} Ask"
+    if bid_col not in chain.columns or ask_col not in chain.columns:
+        return {}
+
+    usable_chain = chain.copy()
+    usable_chain = usable_chain[pd.to_numeric(usable_chain["Strike"], errors="coerce").notna()]
+    usable_chain = usable_chain[
+        (pd.to_numeric(usable_chain[bid_col], errors="coerce").fillna(0) > 0)
+        | (pd.to_numeric(usable_chain[ask_col], errors="coerce").fillna(0) > 0)
+    ]
+    if usable_chain.empty:
+        return {}
+
+    strikes = sorted(float(strike) for strike in usable_chain["Strike"].dropna().unique())
+    default_index = min(range(len(strikes)), key=lambda index: abs(strikes[index] - default_strike))
+    selected_strike = st.selectbox(
+        "Reference strike from loaded chain",
+        strikes,
+        index=default_index,
+        format_func=lambda value: f"{value:.2f}",
+        key=f"single_option_reference_strike_{option_type}",
+        help="When real data is loaded, changing this strike updates premium to the bid/ask midpoint and IV to the matching contract.",
+    )
+    selected_defaults = _option_defaults_for_strike(usable_chain, option_type, float(selected_strike))
+    if selected_defaults:
+        st.caption(
+            f"Using real-chain midpoint for {option_type.lower()} strike {selected_defaults['strike']:.2f}: "
+            f"premium {selected_defaults['premium']:.2f}, IV {selected_defaults['implied_volatility']:.2f}%."
+        )
+    return selected_defaults
+
+
 def _option_defaults_from_chain(chain: pd.DataFrame, option_type: str, stock_price: float) -> tuple[dict, pd.DataFrame]:
     """Return editable simulator defaults from the nearest option-chain contract."""
     frame = chain.copy()
@@ -436,6 +852,20 @@ def _option_defaults_from_chain(chain: pd.DataFrame, option_type: str, stock_pri
     reference_cols = ["Strike", "Call Bid", "Call Ask", "Put Bid", "Put Ask", "IV", "Delta"]
     reference = frame.sort_values("Distance").head(7)[[col for col in reference_cols if col in frame.columns]].copy()
     row = frame.sort_values("Distance").iloc[0]
+    defaults = _option_defaults_from_chain_row(row, option_type)
+    return (defaults, reference)
+
+
+def _option_defaults_for_strike(chain: pd.DataFrame, option_type: str, strike: float) -> dict:
+    """Return option defaults for the closest available strike in a loaded chain."""
+    frame = chain.copy()
+    frame["Distance"] = (frame["Strike"] - strike).abs()
+    row = frame.sort_values("Distance").iloc[0]
+    return _option_defaults_from_chain_row(row, option_type)
+
+
+def _option_defaults_from_chain_row(row: pd.Series, option_type: str) -> dict:
+    """Return premium and IV defaults from one option-chain row."""
     bid_col = f"{option_type} Bid"
     ask_col = f"{option_type} Ask"
     bid = _safe_float(row.get(bid_col), 0.0)
@@ -443,15 +873,12 @@ def _option_defaults_from_chain(chain: pd.DataFrame, option_type: str, stock_pri
     premium = (bid + ask) / 2 if bid > 0 and ask > 0 else max(bid, ask, 0.01)
     iv = _safe_float(row.get("IV"), 0.35)
     iv_percent = iv * 100 if iv <= 3 else iv
-    return (
-        {
-            "option_type": option_type,
-            "strike": float(row["Strike"]),
-            "premium": round(premium, 2),
-            "implied_volatility": round(iv_percent, 2),
-        },
-        reference,
-    )
+    return {
+        "option_type": option_type,
+        "strike": float(row["Strike"]),
+        "premium": round(premium, 2),
+        "implied_volatility": round(iv_percent, 2),
+    }
 
 
 def _stock_round_trip_commission(shares: int, order_commission: float, per_share_fee: float) -> float:
@@ -471,6 +898,11 @@ def _pnl_percent(pnl: float, return_basis: float) -> float:
     return round((float(pnl) / return_basis) * 100, 2)
 
 
+def _valuation_model_label(valuation_model: str) -> str:
+    """Return a short, user-facing option valuation model label."""
+    return "American binomial" if valuation_model.startswith("American") else "European Black-Scholes"
+
+
 def _option_model_value(
     option_type: str,
     stock_price: float,
@@ -479,10 +911,21 @@ def _option_model_value(
     volatility: float,
     risk_free_rate: float,
     dividend_yield: float,
+    valuation_model: str = "European (Black-Scholes)",
 ) -> float:
-    """Return Black-Scholes option value, falling back to intrinsic value at expiration."""
+    """Return model-based option value, falling back to intrinsic value at expiration."""
     if days_to_expiration <= 0 or volatility <= 0:
         return max(stock_price - strike, 0) if option_type == "Call" else max(strike - stock_price, 0)
+    if valuation_model.startswith("American"):
+        return _american_binomial_option_value(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            volatility,
+            risk_free_rate,
+            dividend_yield,
+        )
 
     t = days_to_expiration / 365
     d1, d2 = _black_scholes_d1_d2(stock_price, strike, t, volatility, risk_free_rate, dividend_yield)
@@ -491,6 +934,188 @@ def _option_model_value(
     if option_type == "Call":
         return discounted_stock * _norm_cdf(d1) - discounted_strike * _norm_cdf(d2)
     return discounted_strike * _norm_cdf(-d2) - discounted_stock * _norm_cdf(-d1)
+
+
+def _american_binomial_option_value(
+    option_type: str,
+    stock_price: float,
+    strike: float,
+    days_to_expiration: int,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+) -> float:
+    """Return American option value using a Cox-Ross-Rubinstein binomial tree."""
+    if days_to_expiration <= 0 or volatility <= 0:
+        return max(stock_price - strike, 0) if option_type == "Call" else max(strike - stock_price, 0)
+
+    steps = max(25, min(200, int(days_to_expiration) * 2))
+    total_time = days_to_expiration / 365
+    dt = total_time / steps
+    up = math.exp(volatility * math.sqrt(dt))
+    down = 1 / up
+    discount = math.exp(-risk_free_rate * dt)
+    growth = math.exp((risk_free_rate - dividend_yield) * dt)
+    probability = (growth - down) / (up - down)
+    probability = min(max(probability, 0.0), 1.0)
+
+    values = []
+    for node in range(steps + 1):
+        node_price = stock_price * (up**node) * (down ** (steps - node))
+        values.append(_option_intrinsic_value(option_type, node_price, strike))
+
+    for step in range(steps - 1, -1, -1):
+        for node in range(step + 1):
+            node_price = stock_price * (up**node) * (down ** (step - node))
+            continuation_value = discount * (probability * values[node + 1] + (1 - probability) * values[node])
+            exercise_value = _option_intrinsic_value(option_type, node_price, strike)
+            values[node] = max(continuation_value, exercise_value)
+
+    return values[0]
+
+
+def _option_intrinsic_value(option_type: str, stock_price: float, strike: float) -> float:
+    """Return intrinsic value for one option share."""
+    return max(stock_price - strike, 0) if option_type == "Call" else max(strike - stock_price, 0)
+
+
+def _option_model_greeks(
+    option_type: str,
+    stock_price: float,
+    strike: float,
+    days_to_expiration: int,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    valuation_model: str = "European (Black-Scholes)",
+) -> dict:
+    """Return option Greeks for the selected valuation model."""
+    if not valuation_model.startswith("American"):
+        return _black_scholes_greeks(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            volatility,
+            risk_free_rate,
+            dividend_yield,
+        )
+    return _finite_difference_greeks(
+        option_type,
+        stock_price,
+        strike,
+        days_to_expiration,
+        volatility,
+        risk_free_rate,
+        dividend_yield,
+        valuation_model,
+    )
+
+
+def _finite_difference_greeks(
+    option_type: str,
+    stock_price: float,
+    strike: float,
+    days_to_expiration: int,
+    volatility: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    valuation_model: str,
+) -> dict:
+    """Estimate Greeks numerically for models without closed-form Greeks."""
+    base_value = _option_model_value(
+        option_type,
+        stock_price,
+        strike,
+        days_to_expiration,
+        volatility,
+        risk_free_rate,
+        dividend_yield,
+        valuation_model,
+    )
+    price_step = max(stock_price * 0.01, 0.01)
+    up_value = _option_model_value(
+        option_type,
+        stock_price + price_step,
+        strike,
+        days_to_expiration,
+        volatility,
+        risk_free_rate,
+        dividend_yield,
+        valuation_model,
+    )
+    down_value = _option_model_value(
+        option_type,
+        max(stock_price - price_step, 0.01),
+        strike,
+        days_to_expiration,
+        volatility,
+        risk_free_rate,
+        dividend_yield,
+        valuation_model,
+    )
+    delta = (up_value - down_value) / (2 * price_step)
+    gamma = (up_value - 2 * base_value + down_value) / (price_step**2)
+
+    vol_step = 0.01
+    vega = (
+        _option_model_value(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            volatility + vol_step,
+            risk_free_rate,
+            dividend_yield,
+            valuation_model,
+        )
+        - _option_model_value(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            max(volatility - vol_step, 0.0001),
+            risk_free_rate,
+            dividend_yield,
+            valuation_model,
+        )
+    ) / 2
+
+    rate_step = 0.01
+    rho = (
+        _option_model_value(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            volatility,
+            risk_free_rate + rate_step,
+            dividend_yield,
+            valuation_model,
+        )
+        - _option_model_value(
+            option_type,
+            stock_price,
+            strike,
+            days_to_expiration,
+            volatility,
+            risk_free_rate - rate_step,
+            dividend_yield,
+            valuation_model,
+        )
+    ) / 2
+
+    theta = _option_model_value(
+        option_type,
+        stock_price,
+        strike,
+        max(days_to_expiration - 1, 0),
+        volatility,
+        risk_free_rate,
+        dividend_yield,
+        valuation_model,
+    ) - base_value
+    return {"Delta": delta, "Gamma": gamma, "Theta": theta, "Vega": vega, "Rho": rho}
 
 
 def _black_scholes_greeks(
@@ -586,7 +1211,7 @@ def _render_strategy_greeks(legs: list[dict], stock_price: float, model_inputs: 
             continue
         has_options = True
         direction_sign = 1 if leg["Action"] == "Buy" else -1
-        greeks = _black_scholes_greeks(
+        greeks = _option_model_greeks(
             leg["Instrument"],
             stock_price,
             float(leg["Strike"]),
@@ -594,6 +1219,7 @@ def _render_strategy_greeks(legs: list[dict], stock_price: float, model_inputs: 
             max(float(leg.get("IV %", 35.0)) / 100, 0.0001),
             float(model_inputs.get("risk_free_rate", 0.0)),
             float(model_inputs.get("dividend_yield", 0.0)),
+            str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
         )
         for greek, value in greeks.items():
             totals[greek] += value * int(leg["Quantity"]) * 100 * direction_sign
@@ -614,19 +1240,31 @@ def _render_option_variable_explanations() -> None:
         """
 **Variable definitions and implications**
 
-**Delta:** Measures directional exposure. A delta near `+0.50` behaves like roughly 50 shares per contract; negative delta benefits from price declines.
+**Delta:** Shows how much the option price is expected to change for a 1 dollar move in the stock, before contract size. A call with delta `+0.50` should gain about 0.50 per share if the stock rises 1 dollar. Since one contract usually controls 100 shares, that is about 50 dollars per contract. Put deltas are usually negative, so they generally gain when the stock falls. Delta is not fixed; it changes as price, time, and IV change.
 
-**Gamma:** Measures how quickly delta changes when the stock moves. High gamma means the position becomes more sensitive as price moves, which can help buyers and hurt short-option sellers.
+**Gamma:** Shows how quickly delta changes when the stock moves. High gamma means the option's directional exposure can change fast. This can help option buyers when the stock moves strongly in their favor, because delta accelerates. It can hurt short-option sellers because losses can speed up as the stock moves against them. Gamma is usually highest for at-the-money options near expiration.
 
-**Theta:** Measures time decay. Long options usually have negative theta; short options usually collect theta but carry tail risk.
+**Theta:** Estimates daily time decay, all else equal. Long options usually have negative theta because time passing removes extrinsic value. Short options usually have positive theta because the seller benefits as time value decays. Theta is not a guaranteed daily amount; it changes with price, IV, and time remaining, and it often accelerates close to expiration.
 
-**Vega:** Measures sensitivity to implied volatility. Long options usually benefit when IV rises; short options usually benefit when IV falls.
+**Vega:** Shows how much the option value changes for a 1 volatility-point move in implied volatility. Example: if vega is `0.08`, a move from 35% IV to 36% IV adds roughly 0.08 per share, or about 8 dollars per contract. Long options usually benefit when IV rises and lose when IV falls. Short options usually benefit when IV falls but can lose when IV spikes.
 
-**Rho:** Measures sensitivity to interest rates. It is usually smaller than delta, gamma, theta, or vega for short-dated equity options, but it can matter more for long-dated options.
+**Rho:** Shows sensitivity to a 1 percentage-point move in interest rates. It is usually less important than delta, gamma, theta, or vega for short-dated stock options. It can matter more for long-dated options, high-rate environments, or strategies with many contracts.
 
-**Implied volatility:** Higher IV makes options more expensive. A correct directional view can still lose money if IV drops enough after entry.
+**Implied volatility (IV):** The market's embedded expectation of future movement. Higher IV usually makes both calls and puts more expensive because the market is pricing a wider range of possible outcomes. A trader can be right on direction and still lose if IV drops enough after entry, especially after earnings or other scheduled events.
 
-**Days elapsed / days to expiration:** As time passes, extrinsic value usually decays. The decay tends to accelerate near expiration, especially for at-the-money options.
+**Valuation model:** European Black-Scholes assumes the option can only be exercised at expiration. American binomial allows early exercise before expiration. U.S. listed equity options are usually American-style, so the American model can be useful for dividend stocks, deep in-the-money puts, short calls near ex-dividend dates, and contracts with very little extrinsic value. The model is still an estimate, not a broker quote.
+
+**IV change (vol points):** Adds or subtracts percentage points from the base IV for the scenario. This is not a relative percentage change. Example: 35% IV plus 5 vol points becomes 40% IV. Use positive values such as +5 or +10 to test a volatility spike. Use negative values such as -5 or -10 to test IV crush after earnings or another event. Set it to 0 if you want the scenario to keep IV unchanged.
+
+**Days to expiration:** The total time left until the contract expires. More time usually means more extrinsic value because the stock has more opportunity to move. Less time usually means less extrinsic value and more sensitivity to whether the option is in, at, or out of the money.
+
+**Simulate after days elapsed:** Moves the scenario forward in time before calculating the payoff. Example: if days to expiration is 30 and days elapsed is 7, the scenario is priced with 23 days left. This lets you test the combined effect of stock movement, time decay, and IV change before expiration.
+
+**Entry premium:** The price paid or received per option share when entering the trade. Since one standard contract controls 100 shares, a 3.00 premium equals 300 dollars per contract before commissions. Buyers pay the premium; sellers receive it but take on obligation risk.
+
+**Strike:** The price where the option begins to have intrinsic value at expiration. A call has intrinsic value when the stock is above the strike. A put has intrinsic value when the stock is below the strike. The distance between stock price and strike affects delta, premium, and probability of finishing in the money.
+
+**Break-even:** The approximate stock price at expiration where the option trade starts to make money before commissions. For a bought call, break-even is strike plus premium. For a bought put, break-even is strike minus premium. Before expiration, break-even is less exact because IV and time value still affect the option price.
 
 **Commissions:** Broker commissions and per-contract fees reduce every strategy's net P&L. They matter more for multi-leg spreads, butterflies, and small premium trades.
 """
@@ -635,7 +1273,7 @@ def _render_option_variable_explanations() -> None:
 
 def _format_money_or_text(value: object) -> str:
     """Format numeric money values while preserving text descriptions."""
-    return f"${float(value):,.2f}" if isinstance(value, (int, float)) else str(value)
+    return f"\\${float(value):,.2f}" if isinstance(value, (int, float)) else str(value)
 
 
 def _strategy_template_legs(preset: str, stock_price: float, shares: int, contracts: int) -> list[dict]:
@@ -685,7 +1323,8 @@ def _strategy_template_legs(preset: str, stock_price: float, shares: int, contra
         ],
         "Custom": [
             _stock_leg("Buy", shares),
-            _option_leg("Call", "Buy", contracts, upper_mid, stock_price * 0.03),
+            _option_leg("Call", "Buy", contracts, at_the_money, stock_price * 0.04),
+            _option_leg("Put", "Buy", contracts, at_the_money, stock_price * 0.04),
         ],
     }
     return templates[preset]
@@ -792,6 +1431,7 @@ def _leg_pnl(price: float, leg: dict, stock_entry_price: float, model_inputs: di
             volatility,
             float(model_inputs.get("risk_free_rate", 0.0)),
             float(model_inputs.get("dividend_yield", 0.0)),
+            str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
         )
     else:
         value = max(price - strike, 0) if leg["Instrument"] == "Call" else max(strike - price, 0)
@@ -876,8 +1516,8 @@ def _render_strategy_table(legs: list[dict], stock_entry_price: float, model_inp
                 float(model_inputs.get("option_order_commission", 0.0)),
                 float(model_inputs.get("option_contract_fee", 0.0)),
             )
-    st.caption(f"Estimated net opening cash flow: **${net_opening_cash_flow:,.2f}**")
-    st.caption(f"Estimated round-trip commissions included in payoff: **${round_trip_commission:,.2f}**")
+    st.caption(f"Estimated net opening cash flow: **\\${net_opening_cash_flow:,.2f}**")
+    st.caption(f"Estimated round-trip commissions included in payoff: **\\${round_trip_commission:,.2f}**")
     st.dataframe(frame, use_container_width=True, hide_index=True)
 
 
@@ -1074,7 +1714,7 @@ def _scenario_selector_row(frame: pd.DataFrame, key: str, state_key: str) -> pd.
         step=1,
         format="%d%%",
         key=slider_key,
-        help="Starts at 0%. Move right for positive price scenarios and left for negative price scenarios.",
+        help=_SIMULATOR_TOOLKIT["price_move_scenario"],
         on_change=_sync_selected_scenario,
         args=(frame, slider_key, state_key),
     )

@@ -45,6 +45,50 @@ def init_session_state() -> None:
         if key not in st.session_state:
             st.session_state[key] = value
 
+    if "main_nav_radio" not in st.session_state:
+        st.session_state.main_nav_radio = st.session_state.main_section
+
+    if "custom_ticker_input" not in st.session_state:
+        st.session_state.custom_ticker_input = st.session_state.custom_ticker
+
+    if "sidebar_ticker" not in st.session_state:
+        st.session_state.sidebar_ticker = st.session_state.selected_ticker
+
+    main_section = st.session_state.main_nav_radio
+    if main_section in SUBMENUS:
+        submenu_key = _submenu_widget_key(main_section)
+        if submenu_key not in st.session_state:
+            current_submenu = st.session_state.submenu
+            st.session_state[submenu_key] = (
+                current_submenu
+                if current_submenu in SUBMENUS[main_section]
+                else SUBMENUS[main_section][0]
+            )
+        st.session_state.submenu = st.session_state[submenu_key]
+
+
+def _submenu_widget_key(main_section: str) -> str:
+    """Return the session-state key for a section's submenu radio."""
+    return f"submenu_{main_section}"
+
+
+def _on_main_section_change() -> None:
+    """Keep section/submenu session state aligned when the main menu changes."""
+    section = st.session_state.main_nav_radio
+    st.session_state.main_section = section
+    if section in SUBMENUS:
+        submenu_key = _submenu_widget_key(section)
+        if submenu_key not in st.session_state:
+            st.session_state[submenu_key] = SUBMENUS[section][0]
+        st.session_state.submenu = st.session_state[submenu_key]
+    else:
+        st.session_state.submenu = None
+
+
+def _on_submenu_change(main_section: str) -> None:
+    """Persist the active submenu for the current main section."""
+    st.session_state.submenu = st.session_state[_submenu_widget_key(main_section)]
+
 
 def render_sidebar() -> Tuple[str, Optional[str]]:
     """
@@ -65,15 +109,14 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
         st.divider()
         st.markdown("**Navigation**")
 
-        main_section = st.radio(
+        st.radio(
             "Main menu",
             options=MAIN_SECTIONS,
-            index=MAIN_SECTIONS.index(st.session_state.main_section)
-            if st.session_state.main_section in MAIN_SECTIONS
-            else 0,
             label_visibility="collapsed",
             key="main_nav_radio",
+            on_change=_on_main_section_change,
         )
+        main_section = st.session_state.main_nav_radio
         st.session_state.main_section = main_section
 
         submenu = None
@@ -81,16 +124,18 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
             st.divider()
             st.markdown("**Submenu**")
             submenu_options = SUBMENUS[main_section]
-            default_sub = st.session_state.submenu
-            if default_sub not in submenu_options:
-                default_sub = submenu_options[0]
-            submenu = st.radio(
+            submenu_key = _submenu_widget_key(main_section)
+            if submenu_key not in st.session_state:
+                st.session_state[submenu_key] = submenu_options[0]
+            st.radio(
                 "Submenu",
                 options=submenu_options,
-                index=submenu_options.index(default_sub),
                 label_visibility="collapsed",
-                key=f"submenu_{main_section}",
+                key=submenu_key,
+                on_change=_on_submenu_change,
+                args=(main_section,),
             )
+            submenu = st.session_state[submenu_key]
             st.session_state.submenu = submenu
 
         with symbol_container:
@@ -107,14 +152,13 @@ def render_sidebar() -> Tuple[str, Optional[str]]:
 def _render_symbol_selector(available_tickers: list[str], main_section: str) -> None:
     """Render custom ticker input and context-specific suggested symbols."""
     st.markdown("**Symbol**")
-    custom_symbol = st.text_input(
+    st.text_input(
         "Custom symbol",
-        value=st.session_state.get("custom_ticker", ""),
         placeholder="e.g. DCTH, PLTR, SMCI",
         key="custom_ticker_input",
         label_visibility="collapsed",
     )
-    custom_symbol = normalize_ticker(custom_symbol)
+    custom_symbol = normalize_ticker(st.session_state.custom_ticker_input)
 
     if custom_symbol:
         st.session_state.selected_ticker = custom_symbol
@@ -122,16 +166,19 @@ def _render_symbol_selector(available_tickers: list[str], main_section: str) -> 
     else:
         st.session_state.custom_ticker = ""
         if main_section == "Home Dashboard":
-            suggested_symbol = st.selectbox(
+            if st.session_state.sidebar_ticker not in available_tickers:
+                st.session_state.sidebar_ticker = (
+                    st.session_state.selected_ticker
+                    if st.session_state.selected_ticker in available_tickers
+                    else available_tickers[0]
+                )
+            st.selectbox(
                 "Suggested symbols",
                 options=available_tickers,
-                index=available_tickers.index(st.session_state.selected_ticker)
-                if st.session_state.selected_ticker in available_tickers
-                else 0,
                 key="sidebar_ticker",
                 label_visibility="collapsed",
             )
-            st.session_state.selected_ticker = suggested_symbol
+            st.session_state.selected_ticker = st.session_state.sidebar_ticker
 
     st.caption(f"Active: **{st.session_state.selected_ticker}**")
     if main_section != "Home Dashboard" and not custom_symbol:
