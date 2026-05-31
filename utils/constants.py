@@ -98,6 +98,7 @@ SUBMENUS = {
         "Rules playbook",
         "Stock P&L simulator",
         "Options P&L simulator",
+        "Strategy payoff lab",
         "Market scenario lab",
     ],
 }

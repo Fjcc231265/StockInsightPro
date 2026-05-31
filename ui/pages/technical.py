@@ -2,7 +2,6 @@
 
 import streamlit as st
 
-from ui.components.cards import render_todo_callout
 from ui.components.charts import (
     macd_chart,
     price_line_chart,
@@ -54,7 +53,6 @@ def _price_chart(ticker: str) -> None:
     """Price chart submenu."""
     _render_timeframe_price_chart(ticker, "price_chart")
     _render_written_technical_analysis(ticker)
-    render_todo_callout("Add drawing tools and saved chart layouts.")
 
 
 def _moving_averages(ticker: str) -> None:
@@ -66,7 +64,6 @@ def _moving_averages(ticker: str) -> None:
     _, table_col, _ = st.columns([1, 2, 1])
     with table_col:
         st.dataframe(ma_df, use_container_width=True, hide_index=True)
-    render_todo_callout("Expand the moving average table with SMA 50/200 and EMA 12/26.")
 
 
 def _rsi(ticker: str) -> None:
@@ -91,7 +88,6 @@ def _rsi(ticker: str) -> None:
             else:
                 zone = "Neutral"
             st.info(f"Latest RSI({period}): **{latest:.2f}** — {zone}.")
-    render_todo_callout("Add RSI divergence detection and configurable alert thresholds.")
 
 
 def _macd(ticker: str) -> None:
@@ -105,7 +101,6 @@ def _macd(ticker: str) -> None:
     st.caption(f"Indicator source: {macd_df.attrs.get('source', 'Daily OHLC MACD')}")
     st.plotly_chart(macd_chart(macd_df, ticker), use_container_width=True)
     st.info(_macd_takeaway(macd_df))
-    render_todo_callout("Add configurable MACD alerts and divergence detection.")
 
 
 def _macd_takeaway(macd_df) -> str:
@@ -150,7 +145,6 @@ def _support_resistance(ticker: str) -> None:
     st.caption(f"Table source: {levels.attrs.get('source', 'Price history')}")
     st.dataframe(levels, use_container_width=True, hide_index=True)
     _render_timeframe_price_chart(ticker, "support_resistance")
-    render_todo_callout("Add volume-profile weighting and saved manual levels.")
 
 
 def _volume_analysis(ticker: str) -> None:
@@ -168,7 +162,6 @@ def _volume_analysis(ticker: str) -> None:
     _, table_col, _ = st.columns([1, 2, 1])
     with table_col:
         st.dataframe(vol_stats, use_container_width=True, hide_index=True)
-    render_todo_callout("Add OBV, VWAP, and relative volume indicators.")
 
 
 def _candlestick_patterns(ticker: str) -> None:
@@ -177,7 +170,6 @@ def _candlestick_patterns(ticker: str) -> None:
     st.caption(f"Table source: {patterns.attrs.get('source', 'Price history')}")
     st.dataframe(patterns, use_container_width=True, hide_index=True)
     _render_timeframe_price_chart(ticker, "candlestick_patterns")
-    render_todo_callout("Expand the pattern engine with confirmation and multi-candle setups.")
 
 
 def _render_timeframe_price_chart(ticker: str, key_suffix: str) -> None:

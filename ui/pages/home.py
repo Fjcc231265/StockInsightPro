@@ -2,7 +2,7 @@
 
 import streamlit as st
 
-from ui.components.cards import render_metric_card, render_todo_callout
+from ui.components.cards import render_metric_card
 from ui.components.charts import price_line_chart
 from ui.components.layout import render_panel
 from services.market_data_service import (
@@ -50,9 +50,6 @@ def render() -> None:
 
     with col_right:
         render_panel("Top Movers", lambda: _render_movers_panel())
-
-    render_todo_callout("Portfolio sync and intraday refresh controls will be added in a later phase.")
-
 
 def _render_symbol_panel(ticker: str, quote: dict) -> None:
     """Symbol detail and price chart."""

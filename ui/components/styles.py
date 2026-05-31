@@ -131,17 +131,6 @@ def get_custom_css(theme_id: str | None = None) -> str:
             margin-bottom: 1rem;
         }}
 
-        /* Info / TODO callouts */
-        .sip-todo {{
-            background: #fff8e6;
-            border-left: 4px solid {colors['accent']};
-            padding: 0.75rem 1rem;
-            border-radius: 0 6px 6px 0;
-            font-size: 0.9rem;
-            color: #5c4a1a;
-            margin: 0.75rem 0;
-        }}
-
         /* Sidebar branding */
         [data-testid="stSidebar"] {{
             background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);

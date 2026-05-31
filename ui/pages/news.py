@@ -2,7 +2,6 @@
 
 import streamlit as st
 
-from ui.components.cards import render_todo_callout
 from ui.components.charts import sentiment_gauge
 from ui.components.page_router import render_ticker_submenu_page
 from ai.market_interpreter import summarize_news_and_sentiment
@@ -112,7 +111,6 @@ def _key_risks() -> None:
     st.markdown("**Identified Risks (Mock)**")
     for risk in get_key_risks():
         st.markdown(f"- {risk}")
-    render_todo_callout("Extract risks from filings and news via NLP pipeline.")
 
 
 def _catalysts() -> None:
@@ -120,13 +118,11 @@ def _catalysts() -> None:
     st.markdown("**Upcoming Catalysts (Mock)**")
     for cat in get_market_catalysts():
         st.markdown(f"- {cat}")
-    render_todo_callout("Link to earnings calendar and corporate event data.")
 
 
 def _ai_summary(ticker: str) -> None:
     """AI summary placeholder panel."""
     st.markdown(summarize_news_and_sentiment(ticker))
-    render_todo_callout("Connect LLM to summarize news, filings, and analyst notes.")
 
 
 def _render_news_card(row) -> None:

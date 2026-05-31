@@ -9,7 +9,6 @@ import streamlit as st
 import pandas as pd
 
 from data.providers import alpha_vantage_provider
-from ui.components.cards import render_todo_callout
 from ui.components.charts import comparison_bar_chart
 from ui.components.page_router import render_submenu_page
 from services.market_data_service import (
@@ -117,7 +116,6 @@ def _track_favorites() -> None:
     if st.button("Save Current Favorites to Disk"):
         st.session_state.watchlist = save_favorite_symbols(st.session_state.watchlist)
         st.success("Favorites saved to disk.")
-    render_todo_callout("Add drag-and-drop sorting and portfolio grouping.")
 
 
 def _alerts() -> None:
@@ -643,4 +641,3 @@ def _compare_stocks() -> None:
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.plotly_chart(comparison_bar_chart(df, "Change %"), use_container_width=True)
-    render_todo_callout("Add multi-metric comparison and correlation matrix.")

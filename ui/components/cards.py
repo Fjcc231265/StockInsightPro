@@ -52,12 +52,6 @@ def render_quote_cards(quote: dict) -> None:
     with cols[3]:
         render_metric_card("Sector", quote["sector"], delta_value=0)
 
-
-def render_todo_callout(message: str) -> None:
-    """Display a visible TODO placeholder for future implementation."""
-    st.markdown(f'<div class="sip-todo"><strong>TODO:</strong> {message}</div>', unsafe_allow_html=True)
-
-
 def render_section_header(title: str, subtitle: str = "") -> None:
     """Render page section title with optional subtitle."""
     st.markdown(f"### {title}")
