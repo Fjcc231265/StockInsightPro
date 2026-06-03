@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import math
 
 import plotly.graph_objects as go
@@ -241,8 +242,21 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
         objectives = lesson.get("objectives", [])
         if objectives:
             st.markdown("**Objectives**")
+            objective_notes = lesson.get("objective_notes", {})
             for item in objectives:
                 st.markdown(f"- {item}")
+                note = objective_notes.get(str(item))
+                if note:
+                    note_html = html.escape(str(note)).replace("$", "&#36;")
+                    note_html = note_html.replace("\n\n", "<br><br>").replace("\n", "<br>")
+                    st.markdown(
+                        f"""
+<div style="margin: -0.25rem 0 0.85rem 1.5rem; color: #4b5563; font-size: 0.95rem; line-height: 1.45;">
+{note_html}
+</div>
+""",
+                        unsafe_allow_html=True,
+                    )
         for section in lesson.get("sections", []):
             heading = section.get("heading")
             body = section.get("body", "")

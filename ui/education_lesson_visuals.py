@@ -137,7 +137,7 @@ _VISUAL_CAPTIONS: dict[str, str] = {
     "credit_spread_profit_zone": "Many traders close credit spreads before expiration after capturing most of max profit.",
     "margin_comparison": "Defined-risk spreads usually use less buying power than naked short options.",
     "bear_put_spread": "Bear put spread: defined-risk bearish trade with profit capped at spread width minus debit.",
-    "market_drivers": "Price moves when buyers and sellers disagree; macro sets context, flow drives day-to-day action.",
+    "market_drivers": "Conceptual chart only—the bar heights are not real measured percentages. They show that several forces can influence price at once.",
     "american_european": "American options can be exercised early; European options only at expiration.",
     "order_types": "Limit orders control price; market orders prioritize speed over price.",
     "position_sizing": "Risk per trade as a small fraction of account limits ruin from a string of losses.",
@@ -613,9 +613,18 @@ def _bear_put_spread() -> None:
 @_register("market_drivers")
 def _market_drivers() -> None:
     drivers = ["Macro backdrop", "Earnings / news", "Sector rotation", "Order flow", "Positioning"]
-    influence = [0.7, 0.85, 0.75, 0.9, 0.8]
-    fig = go.Figure(go.Bar(x=drivers, y=influence, marker_color=COLORS["secondary"]))
-    fig.update_layout(**_chart_layout("What influences price (illustrative)", "Driver", "Relative impact", height=300))
+    # Illustrative scores only (0–1 scale), not empirical market data.
+    illustrative_scores = [0.7, 0.85, 0.75, 0.9, 0.8]
+    fig = go.Figure(go.Bar(x=drivers, y=illustrative_scores, marker_color=COLORS["secondary"]))
+    fig.update_layout(
+        **_chart_layout(
+            "What influences price (conceptual)",
+            "Driver",
+            "Illustrative influence score (not real data)",
+            height=320,
+            showlegend=False,
+        )
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 

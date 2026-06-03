@@ -112,10 +112,14 @@
         "Separate opinion from a testable trade plan",
         "Understand that price reacts to flow, sentiment, and expectations"
       ],
+      "objective_notes": {
+        "Separate opinion from a testable trade plan": "Opinion = \"I believe this stock should go up.\"\n\nTestable trade plan = \"I will buy if it breaks above $50 on higher-than-average volume, risking no more than 2% of my capital, and I will exit the position if it falls below $47.\"",
+        "Understand that price reacts to flow, sentiment, and expectations": "Capital flows, institutional positioning, and changes in market sentiment can move prices long before fundamentals fully reflect those changes. Markets are forward-looking, so prices often respond more to expectations about future earnings, growth, and risk than to current results."
+      },
       "sections": [
         {
           "heading": "What moves the market",
-          "body": "Prices change when buyers and sellers disagree on value and when capital rotates between assets. Macro conditions set the backdrop; order flow and positioning drive day-to-day moves."
+          "body": "Prices change when buyers and sellers disagree on value and when capital rotates between assets. Macro conditions set the backdrop; order flow and positioning drive day-to-day moves. Bullish investors (bulls) push prices higher when they expect future gains, while bearish investors (bears) create selling pressure when they anticipate weaker performance or increased risk."
         },
         {
           "heading": "Professional habits",
@@ -124,7 +128,8 @@
       ],
       "key_points": [
         "The market does not owe you a move in your direction",
-        "Liquidity and spread matter as much as direction"
+        "Bid is the highest price buyers are willing to pay; ask is the lowest price sellers are willing to accept.",
+        "Liquidity and spread matter as much as direction. Highly liquid markets generally allow traders to enter and exit positions more easily and at lower cost, while wide bid-ask spreads can significantly reduce profits and increase trading risk, especially in volatile conditions."
       ],
       "practice": "Write one sentence each for thesis, stop/invalidation, and target before any trade."
     },
