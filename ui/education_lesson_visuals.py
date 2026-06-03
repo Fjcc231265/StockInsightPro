@@ -5,15 +5,18 @@ from __future__ import annotations
 import math
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
+from services.market_data_service import get_price_history
+from services.technical_data_service import get_support_resistance
 from utils.constants import COLORS
 
 # Lesson id -> list of visual keys to render (in order).
 LESSON_VISUALS: dict[str, list[str]] = {
     "market-mindset": ["market_drivers"],
     "support-resistance": ["support_resistance"],
-    "candlestick-patterns": ["candlestick_context"],
+    "candlestick-patterns": ["candle_anatomy", "candlestick_context"],
     "volume-and-gaps": ["volume_bars"],
     "trend-and-timeframes": ["trend_moving_averages"],
     "market-internals": ["market_internals"],
@@ -106,7 +109,8 @@ def render_strategy_playbook_visuals(strategy_id: str) -> None:
 _VISUAL_CAPTIONS: dict[str, str] = {
     "long_call_payoff": "Long call payoff at expiration: profit rises when the stock finishes above strike + premium.",
     "long_put_payoff": "Long put payoff at expiration: profit rises when the stock finishes below strike − premium.",
-    "support_resistance": "Support and resistance are zones where price has repeatedly reacted, not single exact prices.",
+    "support_resistance": "Daily candlestick view for the selected ticker. Support and resistance are treated as zones around recent highs, lows, closes, and pivots—not exact prices.",
+    "candle_anatomy": "A single candle summarizes one period of trading: open, high, low, close, body, and wicks.",
     "candlestick_context": "Candle bodies and wicks show who controlled the session; location on the chart matters more than the pattern name alone.",
     "volume_bars": "Volume confirms whether a move had participation from buyers or sellers.",
     "trend_moving_averages": "Higher-time-frame trend (line) with a faster moving average for timing context.",
@@ -206,15 +210,195 @@ def _long_put_payoff() -> None:
 
 @_register("support_resistance")
 def _support_resistance() -> None:
-    days = list(range(30))
-    prices = [100 + 2 * math.sin(i / 3) + (i % 7) * 0.15 for i in days]
+    ticker = str(st.session_state.get("selected_ticker", "AAPL")).upper()
+    prices = get_price_history(ticker, days=120, timeframe="Daily").sort_values("Date").reset_index(drop=True)
+    levels = get_support_resistance(ticker)
+    if prices.empty:
+        st.info(f"No daily price history is available for {ticker}.")
+        return
+
+    prices = prices.tail(90).copy()
+    prices["MA20"] = prices["Close"].rolling(20).mean()
+    prices["MA50"] = prices["Close"].rolling(50).mean()
+    volume_colors = [
+        COLORS["positive"] if close_price >= open_price else COLORS["negative"]
+        for open_price, close_price in zip(prices["Open"], prices["Close"])
+    ]
+
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        row_heights=[0.75, 0.25],
+        vertical_spacing=0.03,
+    )
+    fig.add_trace(
+        go.Candlestick(
+            x=prices["Date"],
+            open=prices["Open"],
+            high=prices["High"],
+            low=prices["Low"],
+            close=prices["Close"],
+            name=ticker,
+            increasing_line_color=COLORS["positive"],
+            decreasing_line_color=COLORS["negative"],
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=prices["Date"], y=prices["MA20"], mode="lines", name="20D MA", line=dict(color=COLORS["accent"], width=1.7)),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(x=prices["Date"], y=prices["MA50"], mode="lines", name="50D MA", line=dict(color=COLORS["secondary"], width=1.7)),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(x=prices["Date"], y=prices["Volume"], name="Volume", marker_color=volume_colors, opacity=0.35),
+        row=2,
+        col=1,
+    )
+
+    avg_range = float((prices["High"] - prices["Low"]).tail(20).mean())
+    latest_close = float(prices["Close"].iloc[-1])
+    zone_half_width = max(avg_range * 0.25, latest_close * 0.004)
+    for _, level in levels.iterrows():
+        price = float(level["Price"])
+        level_type = str(level["Level Type"])
+        if level_type == "Support":
+            color = COLORS["positive"]
+        elif level_type == "Resistance":
+            color = COLORS["negative"]
+        else:
+            color = COLORS["accent"]
+        fig.add_hrect(
+            y0=price - zone_half_width,
+            y1=price + zone_half_width,
+            fillcolor=color,
+            opacity=0.12,
+            line_width=0,
+            row=1,
+            col=1,
+        )
+
+    fig.update_layout(
+        **_chart_layout(
+            f"{ticker} daily support/resistance zones",
+            "",
+            "Price",
+            height=620,
+            xaxis_rangeslider_visible=False,
+            showlegend=True,
+            margin=dict(l=55, r=30, t=90, b=45),
+            legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="left", x=0),
+        )
+    )
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
+    fig.update_xaxes(title_text="Date", row=2, col=1)
+    st.caption(f"Chart source: {prices.attrs.get('source', 'Price history')} · Levels source: {levels.attrs.get('source', 'Price history')}")
+    st.plotly_chart(fig, use_container_width=True)
+    if not levels.empty:
+        display_levels = levels.copy()
+        display_levels["Price"] = display_levels["Price"].map(lambda price: f"${float(price):,.2f}")
+        st.dataframe(display_levels, use_container_width=True, hide_index=True)
+
+
+@_register("candle_anatomy")
+def _candle_anatomy() -> None:
+    open_price = 100
+    close_price = 108
+    high_price = 113
+    low_price = 96
+    x_center = 0
+    body_half_width = 0.22
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=days, y=prices, mode="lines", name="Price", line=dict(color=COLORS["secondary"])))
-    fig.add_hrect(y0=103, y1=106, fillcolor=COLORS["negative"], opacity=0.15, line_width=0)
-    fig.add_hrect(y0=97, y1=99, fillcolor=COLORS["positive"], opacity=0.15, line_width=0)
-    fig.add_annotation(x=28, y=104.5, text="Resistance zone", showarrow=False, font=dict(color=COLORS["negative"]))
-    fig.add_annotation(x=28, y=98, text="Support zone", showarrow=False, font=dict(color=COLORS["positive"]))
-    fig.update_layout(**_chart_layout("Support & resistance zones", "Time", "Price"))
+    fig.add_shape(
+        type="line",
+        x0=x_center,
+        x1=x_center,
+        y0=low_price,
+        y1=high_price,
+        line=dict(color=COLORS["positive"], width=4),
+    )
+    fig.add_shape(
+        type="rect",
+        x0=x_center - body_half_width,
+        x1=x_center + body_half_width,
+        y0=open_price,
+        y1=close_price,
+        fillcolor=COLORS["positive"],
+        opacity=0.8,
+        line=dict(color="#0b5130", width=2),
+    )
+
+    annotations = [
+        ("High", high_price, "Highest traded price"),
+        ("Close", close_price, "End of period"),
+        ("Open", open_price, "Start of period"),
+        ("Low", low_price, "Lowest traded price"),
+    ]
+    for label, price, detail in annotations:
+        fig.add_annotation(
+            x=x_center + 0.72,
+            y=price,
+            text=f"<b>{label}</b><br>{detail}",
+            showarrow=True,
+            arrowhead=2,
+            ax=35,
+            ay=0,
+            font=dict(size=12, color="#123"),
+            align="left",
+        )
+
+    fig.add_annotation(
+        x=x_center - 0.58,
+        y=(open_price + close_price) / 2,
+        text="<b>Body</b><br>Range between<br>open and close",
+        showarrow=True,
+        arrowhead=2,
+        ax=-45,
+        ay=0,
+        font=dict(size=12, color="#123"),
+        align="center",
+    )
+    fig.add_annotation(
+        x=x_center - 0.55,
+        y=(close_price + high_price) / 2,
+        text="Upper wick",
+        showarrow=False,
+        font=dict(size=11, color=COLORS["neutral"]),
+    )
+    fig.add_annotation(
+        x=x_center - 0.55,
+        y=(low_price + open_price) / 2,
+        text="Lower wick",
+        showarrow=False,
+        font=dict(size=11, color=COLORS["neutral"]),
+    )
+    fig.add_annotation(
+        x=x_center,
+        y=92.5,
+        text="<b>Bullish candle:</b> close is above open. For a bearish candle, close is below open.",
+        showarrow=False,
+        font=dict(size=12, color=COLORS["neutral"]),
+    )
+    fig.update_layout(
+        **_chart_layout(
+            "How one candle represents price movement",
+            "",
+            "Price",
+            height=430,
+            showlegend=False,
+            margin=dict(l=45, r=170, t=70, b=45),
+            xaxis=dict(range=[-1.1, 1.6], visible=False),
+            yaxis=dict(range=[91, 115]),
+        )
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 

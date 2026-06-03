@@ -257,6 +257,9 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
 """,
                         unsafe_allow_html=True,
                     )
+        lesson_id = str(lesson.get("id", ""))
+        if lesson_id == "candlestick-patterns":
+            render_visual_keys(["candle_anatomy"])
         for section in lesson.get("sections", []):
             heading = section.get("heading")
             body = section.get("body", "")
@@ -273,8 +276,10 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
         if practice:
             st.markdown("**Practice**")
             st.write(practice)
-        lesson_id = str(lesson.get("id", ""))
-        render_lesson_visuals(lesson_id)
+        if lesson_id == "candlestick-patterns":
+            render_visual_keys(["candlestick_context"])
+        else:
+            render_lesson_visuals(lesson_id)
         simulator = lesson.get("related_simulator")
         if simulator:
             st.caption(f"Related tool: **{simulator}**")

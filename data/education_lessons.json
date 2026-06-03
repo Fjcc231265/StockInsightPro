@@ -148,14 +148,23 @@
           "body": "Trends rarely move in straight lines. Pullbacks to prior structure or moving averages are common places to reassess risk versus reward."
         }
       ],
-      "key_points": ["Broken resistance can become support (and vice versa)"],
+      "key_points": [
+        "Broken resistance can become support (and vice versa). Once a resistance level is decisively broken, it often acts as a support zone as buyers step in to defend the new price level; the opposite can occur when support is broken.",
+        "Retracements are a normal part of healthy trends. Temporary pullbacks allow the market to digest gains or losses, reset sentiment, and create new opportunities for entries with better risk-to-reward ratios.",
+        "Volume helps validate retracements. A pullback on declining volume is often less concerning than one accompanied by heavy selling pressure, which may signal a deeper reversal.",
+        "Moving averages can act as dynamic support or resistance. Many traders monitor key averages such as the 20-, 50-, or 200-period moving average to identify areas where trends may resume."
+      ],
       "practice": "Mark three levels on a daily chart of your active symbol and note what happened at each."
     },
     {
       "id": "candlestick-patterns",
       "module": "stock-foundations",
       "title": "Candlestick context",
-      "objectives": ["Read candles as evidence of control, not as guaranteed signals"],
+      "objectives": [
+        "Understand how each candle summarizes the battle between buyers and sellers during a specific period, showing the open, high, low, and close prices.",
+        "Learn to identify who was in control of the market and how that control may be changing over time.",
+        "Read candles as evidence of control, not as guaranteed signals. A candle reflects what happened during a period of trading, providing clues about market psychology and momentum, but it does not predict the future with certainty."
+      ],
       "sections": [
         {
           "heading": "Useful patterns",
