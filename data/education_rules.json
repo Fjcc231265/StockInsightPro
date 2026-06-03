@@ -35,6 +35,51 @@
       "lesson": "High implied volatility makes options more expensive. Buyers need a larger move to overcome premium paid.",
       "example": "A call may be directionally correct but still lose money if implied volatility drops after entry.",
       "risk_note": "Compare expected move, break-even price, and position sizing before entering."
+    },
+    {
+      "id": "risk-on-direction",
+      "title": "Risk-on favors directional long exposure",
+      "market_regime": "Bullish",
+      "instrument": "Stocks and Options",
+      "lesson": "When volatility is falling and growth stocks lead, directional long stock, call spreads, and momentum setups tend to work better than aggressive premium selling.",
+      "example": "A broad rally with VIX declining often lifts calls and reduces fear premium faster than sideways income trades capture.",
+      "risk_note": "Do not cap upside too early with tight covered calls if you expect a sustained trend."
+    },
+    {
+      "id": "neutral-income",
+      "title": "Neutral markets favor structured income",
+      "market_regime": "Sideways",
+      "instrument": "Stocks and Options",
+      "lesson": "Choppy markets with elevated IV reward defined-risk credit structures: covered calls, put spreads, iron condors, and diagonals that harvest time decay.",
+      "example": "If price stays in a range for weeks, an iron condor can profit while a long straddle loses premium to theta.",
+      "risk_note": "Gap risk can still break ranges—size positions for loss outside the long strikes."
+    },
+    {
+      "id": "protective-put-insurance",
+      "title": "Protective puts are insurance, not a trade idea",
+      "market_regime": "Bearish",
+      "instrument": "Stocks and Options",
+      "lesson": "A protective put limits downside on stock you already own. You pay premium for peace of mind before events or during stress.",
+      "example": "Stock down 10% may cost $1,000; with a put, loss can be closer to premium paid if strike is near the money.",
+      "risk_note": "Insurance raises break-even—only buy protection when the thesis requires holding through risk."
+    },
+    {
+      "id": "liquidity-spreads",
+      "title": "Liquidity is part of the trade",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "Wide bid/ask spreads and low open interest increase real cost. Prefer contracts with tight markets and visible volume.",
+      "example": "Paying $0.30 wide on a $1.00 option is a 30% round-trip handicap before the stock moves.",
+      "risk_note": "Use mid prices for estimates but assume fills near bid when selling and ask when buying."
+    },
+    {
+      "id": "close-winners-early",
+      "title": "Credit spreads do not need max profit",
+      "market_regime": "Sideways",
+      "instrument": "Options",
+      "lesson": "Closing credit spreads at 50–80% of maximum profit reduces gamma risk into expiration.",
+      "example": "A spread opened for $2.00 credit might be closed for $0.50 debit instead of waiting for full decay.",
+      "risk_note": "Always close both legs together with a combo order when possible."
     }
   ]
 }

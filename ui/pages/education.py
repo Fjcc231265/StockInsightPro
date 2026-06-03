@@ -8,10 +8,20 @@ import plotly.graph_objects as go
 import streamlit as st
 import pandas as pd
 
-from services.education_service import filter_rules, load_education_rules
+from services.education_service import (
+    filter_rules,
+    get_checklists,
+    get_lesson,
+    get_lessons_for_module,
+    get_roadmap_modules,
+    get_strategy_playbook,
+    get_module_title,
+    load_education_rules,
+)
 from services.market_data_service import get_quote_summary
 from services.options_data_service import get_options_chain
 from ui.components.page_router import render_submenu_page
+from ui.education_lesson_visuals import render_lesson_visuals, render_strategy_playbook_visuals, render_visual_keys
 from utils.constants import COLORS
 
 _SIMULATOR_TOOLKIT: dict[str, str] = {
@@ -68,6 +78,10 @@ def render(submenu: str) -> None:
     _render_simulator_input_highlight_style()
     handlers = {
         "Learning roadmap": _learning_roadmap,
+        "Lesson library": _lesson_library,
+        "Strategy playbook": _strategy_playbook_page,
+        "Market regime guide": _market_regime_guide,
+        "Pre-trade checklist": _pre_trade_checklist,
         "Rules playbook": _rules_playbook,
         "Stock P&L simulator": _stock_pnl_simulator,
         "Options P&L simulator": _options_pnl_simulator,
@@ -162,39 +176,166 @@ premiums, volatility, time, rates, contract counts, and commissions.
 
 
 def _learning_roadmap() -> None:
-    """Render beginner-oriented education modules."""
+    """Render the structured learning path from local curriculum."""
     st.markdown("### Learning roadmap")
-    st.caption("A practical sequence for users who are new to stocks, options, and risk management.")
-    modules = [
-        (
-            "1. Market structure",
-            "Understand stocks, ETFs, indexes, volume, volatility, bid/ask spreads, and why liquidity matters.",
-        ),
-        (
-            "2. Technical context",
-            "Use trend, support/resistance, RSI, MACD, and volume as evidence, not as guarantees.",
-        ),
-        (
-            "3. Fundamental context",
-            "Review revenue, profitability, balance sheet strength, cash flow, and valuation before sizing a trade.",
-        ),
-        (
-            "4. Options basics",
-            "Learn calls, puts, strikes, expirations, premium, intrinsic value, time value, and break-even levels.",
-        ),
-        (
-            "5. Risk and P&L",
-            "Use simulators to understand maximum loss, leverage, expiration risk, and scenario-based outcomes.",
-        ),
-    ]
-    for title, description in modules:
-        st.markdown(f"**{title}**")
-        st.write(description)
+    st.caption(
+        "Follow these modules in order: stock and chart foundations, options mechanics, "
+        "regime thinking, strategies, and trade management. Open **Lesson library** for full text."
+    )
+    modules = get_roadmap_modules()
+    if not modules:
+        st.warning("Curriculum file not found. Add `data/education_lessons.json` to enable lessons.")
+        return
+
+    for index, module in enumerate(modules, start=1):
+        title = module.get("title", "Module")
+        summary = module.get("summary", "")
+        lesson_ids = module.get("lesson_ids", [])
+        simulators = module.get("recommended_simulators", [])
+        with st.expander(f"{index}. {title}", expanded=index == 1):
+            st.write(summary)
+            if lesson_ids:
+                st.markdown("**Lessons in this module**")
+                for lesson_id in lesson_ids:
+                    lesson = get_lesson(str(lesson_id))
+                    if lesson:
+                        st.markdown(f"- {lesson.get('title', lesson_id)}")
+            if simulators:
+                st.caption("Practice: " + ", ".join(simulators))
 
     st.info(
-        "Education mode should help users ask better questions: What is my thesis? What can go wrong? "
+        "Before every trade, answer: What is my thesis? What can go wrong? "
         "What is my maximum loss? What price or time invalidates the idea?"
     )
+    st.caption("Source material is stored locally in `data/education_lessons.json` (concepts only, no vendor branding).")
+
+
+def _lesson_library() -> None:
+    """Render selectable lessons from the curriculum."""
+    st.markdown("### Lesson library")
+    st.caption(
+        "Concept-based lessons with interactive charts where available. "
+        "Expand a lesson to read the text and explore the visuals."
+    )
+    modules = get_roadmap_modules()
+    if not modules:
+        st.warning("No curriculum modules loaded.")
+        return
+
+    module_options = {str(m["id"]): f"{m.get('order', '')}. {m.get('title', m['id'])}" for m in modules}
+    selected_id = st.selectbox(
+        "Module",
+        options=list(module_options.keys()),
+        format_func=lambda key: module_options[key],
+    )
+    lessons = get_lessons_for_module(selected_id)
+    st.caption(f"{len(lessons)} lesson(s) in **{get_module_title(selected_id)}**.")
+    for lesson in lessons:
+        _render_lesson_card(lesson, expanded=False)
+
+
+def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
+    """Render one lesson as an expander."""
+    title = lesson.get("title", "Lesson")
+    with st.expander(title, expanded=expanded):
+        objectives = lesson.get("objectives", [])
+        if objectives:
+            st.markdown("**Objectives**")
+            for item in objectives:
+                st.markdown(f"- {item}")
+        for section in lesson.get("sections", []):
+            heading = section.get("heading")
+            body = section.get("body", "")
+            if heading:
+                st.markdown(f"**{heading}**")
+            if body:
+                st.write(body)
+        key_points = lesson.get("key_points", [])
+        if key_points:
+            st.markdown("**Key points**")
+            for point in key_points:
+                st.markdown(f"- {point}")
+        practice = lesson.get("practice")
+        if practice:
+            st.markdown("**Practice**")
+            st.write(practice)
+        lesson_id = str(lesson.get("id", ""))
+        render_lesson_visuals(lesson_id)
+        simulator = lesson.get("related_simulator")
+        if simulator:
+            st.caption(f"Related tool: **{simulator}**")
+
+
+def _strategy_playbook_page() -> None:
+    """Render strategy playbook with simulator template hints."""
+    st.markdown("### Strategy playbook")
+    st.caption(
+        "When each structure tends to fit, which payoff-lab template to use, "
+        "and an illustrative expiration payoff chart per strategy."
+    )
+    strategies = get_strategy_playbook()
+    if not strategies:
+        st.warning("No strategies defined in curriculum.")
+        return
+
+    bias_filter = st.selectbox(
+        "Filter by market bias",
+        ["All", "Bullish", "Bearish", "Neutral", "Neutral direction, high movement expected", "Cautious long", "Bullish but defensive"],
+    )
+    for entry in strategies:
+        if bias_filter != "All" and entry.get("market_bias") != bias_filter:
+            continue
+        with st.expander(entry.get("name", "Strategy"), expanded=False):
+            st.markdown(f"**Market bias:** {entry.get('market_bias', '—')}")
+            st.markdown(f"**IV context:** {entry.get('iv_bias', '—')}")
+            st.markdown(f"**Structure:** {entry.get('structure', '—')}")
+            st.write(entry.get("when_to_use", ""))
+            st.warning(entry.get("risks", "Define risk before entry."))
+            strategy_id = str(entry.get("id", ""))
+            render_strategy_playbook_visuals(strategy_id)
+            template = entry.get("template")
+            if template:
+                st.caption(f"Try template **{template}** in Strategy payoff lab.")
+
+
+def _market_regime_guide() -> None:
+    """Render regime framework lessons and link to scenario lab."""
+    st.markdown("### Market regime guide")
+    st.caption("Start with the environment, then pick stock and option structures.")
+    for lesson in get_lessons_for_module("regime-framework"):
+        _render_lesson_card(lesson, expanded=True)
+    st.divider()
+    st.markdown("**Quick regime map**")
+    st.markdown(
+        """
+| Environment | Often works | Often avoid |
+|-------------|-------------|-------------|
+| Risk-on (VIX falling, growth leads) | Stock, call spreads, long calls | Aggressive call selling that caps upside too early |
+| Neutral + elevated IV | Covered calls, credit spreads, iron condors, diagonals | Buying expensive ATM options without a catalyst |
+| Risk-off (VIX rising, bad news punished) | Cash, puts, collars, smaller size | Oversized directional bets |
+"""
+    )
+    st.caption("Use **Market scenario lab** and **Rules playbook** for regime-specific reminders.")
+
+
+def _pre_trade_checklist() -> None:
+    """Render interactive pre-trade checklists."""
+    st.markdown("### Pre-trade checklist")
+    st.caption("Use before opening a new stock or options position.")
+    render_visual_keys(
+        ["regime_decision_flow"],
+        heading="**Decision flow (before you check boxes)**",
+        show_dividers=False,
+    )
+    checklists = get_checklists()
+    if not checklists:
+        st.warning("No checklists defined.")
+        return
+    for checklist in checklists:
+        st.markdown(f"**{checklist.get('title', 'Checklist')}**")
+        for index, item in enumerate(checklist.get("items", [])):
+            st.checkbox(item, key=f"edu_check_{checklist.get('id')}_{index}")
+        st.divider()
 
 
 def _rules_playbook() -> None:

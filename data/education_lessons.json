@@ -1,0 +1,991 @@
+{
+  "version": 1,
+  "roadmap": [
+    {
+      "id": "stock-foundations",
+      "order": 1,
+      "title": "Stock market foundations",
+      "summary": "How markets move, chart structure, volume, internals, and risk discipline before using options.",
+      "lesson_ids": [
+        "market-mindset",
+        "support-resistance",
+        "candlestick-patterns",
+        "volume-and-gaps",
+        "trend-and-timeframes",
+        "market-internals",
+        "money-management-basics"
+      ],
+      "recommended_simulators": []
+    },
+    {
+      "id": "options-contracts",
+      "order": 2,
+      "title": "Options contracts and quotes",
+      "summary": "Calls, puts, strikes, expirations, contract sizing, and how to read an option chain.",
+      "lesson_ids": [
+        "calls-and-puts",
+        "expiration-calendar",
+        "option-quotes",
+        "open-interest-volume",
+        "order-types-options",
+        "american-european"
+      ],
+      "recommended_simulators": ["Options P&L simulator"]
+    },
+    {
+      "id": "pricing-greeks",
+      "order": 3,
+      "title": "Pricing and Greeks",
+      "summary": "What drives premium, intrinsic vs time value, implied volatility, and sensitivity measures.",
+      "lesson_ids": [
+        "intrinsic-time-value",
+        "iv-and-premium",
+        "greeks-overview",
+        "itm-atm-otm-selection",
+        "rates-dividends"
+      ],
+      "recommended_simulators": ["Options P&L simulator"]
+    },
+    {
+      "id": "regime-framework",
+      "order": 4,
+      "title": "Market regime framework",
+      "summary": "Match your idea to the environment: bullish, bearish, sideways, or high volatility.",
+      "lesson_ids": [
+        "regime-overview",
+        "volatility-regimes",
+        "iv-classification",
+        "regime-decision-map"
+      ],
+      "recommended_simulators": ["Market scenario lab"]
+    },
+    {
+      "id": "core-strategies",
+      "order": 5,
+      "title": "Core stock and option strategies",
+      "summary": "Income, protection, spreads, and range trades with defined risk.",
+      "lesson_ids": [
+        "stock-vs-call",
+        "protective-put",
+        "covered-call",
+        "cash-secured-put",
+        "vertical-credit-spreads",
+        "iron-condor",
+        "straddle-strangle"
+      ],
+      "recommended_simulators": ["Strategy payoff lab", "Options P&L simulator"]
+    },
+    {
+      "id": "advanced-structures",
+      "order": 6,
+      "title": "Stock plus options structures",
+      "summary": "Combine shares with options for hedging, income, and leveraged directional exposure.",
+      "lesson_ids": [
+        "collar",
+        "diagonal-calls",
+        "stock-call-spread",
+        "leaps-short-call"
+      ],
+      "recommended_simulators": ["Strategy payoff lab"]
+    },
+    {
+      "id": "trade-management",
+      "order": 7,
+      "title": "Trade management and checklists",
+      "summary": "Rolling, assignment, when to close winners, and pre-trade questions every plan needs.",
+      "lesson_ids": [
+        "rolling-covered-calls",
+        "diagonal-management",
+        "close-spread-winners",
+        "margin-awareness",
+        "pre-trade-questions"
+      ],
+      "recommended_simulators": ["Strategy payoff lab"]
+    }
+  ],
+  "lessons": [
+    {
+      "id": "market-mindset",
+      "module": "stock-foundations",
+      "title": "Market mindset and what moves price",
+      "objectives": [
+        "Separate opinion from a testable trade plan",
+        "Understand that price reacts to flow, sentiment, and expectations"
+      ],
+      "sections": [
+        {
+          "heading": "What moves the market",
+          "body": "Prices change when buyers and sellers disagree on value and when capital rotates between assets. Macro conditions set the backdrop; order flow and positioning drive day-to-day moves."
+        },
+        {
+          "heading": "Professional habits",
+          "body": "Define thesis, invalidation, maximum loss, and time horizon before entry. Look for clean setups rather than forcing trades in unclear conditions."
+        }
+      ],
+      "key_points": [
+        "The market does not owe you a move in your direction",
+        "Liquidity and spread matter as much as direction"
+      ],
+      "practice": "Write one sentence each for thesis, stop/invalidation, and target before any trade."
+    },
+    {
+      "id": "support-resistance",
+      "module": "stock-foundations",
+      "title": "Support, resistance, and structure",
+      "objectives": ["Identify areas where supply and demand historically concentrated"],
+      "sections": [
+        {
+          "heading": "Support and resistance",
+          "body": "Support is a zone where buying has repeatedly appeared. Resistance is where selling has repeatedly capped advances. Levels are zones, not exact prices."
+        },
+        {
+          "heading": "Retracements",
+          "body": "Trends rarely move in straight lines. Pullbacks to prior structure or moving averages are common places to reassess risk versus reward."
+        }
+      ],
+      "key_points": ["Broken resistance can become support (and vice versa)"],
+      "practice": "Mark three levels on a daily chart of your active symbol and note what happened at each."
+    },
+    {
+      "id": "candlestick-patterns",
+      "module": "stock-foundations",
+      "title": "Candlestick context",
+      "objectives": ["Read candles as evidence of control, not as guaranteed signals"],
+      "sections": [
+        {
+          "heading": "Useful patterns",
+          "body": "Narrow range bars suggest consolidation. Wide range bars show decisive participation. Topping or bottoming tails can show rejection at a level. Change-of-character bars may hint at a shift in control when they appear after a trend."
+        },
+        {
+          "heading": "Caution",
+          "body": "Patterns work best with location (near support/resistance) and volume confirmation—not in isolation."
+        }
+      ],
+      "key_points": ["Context beats pattern names"],
+      "practice": "Find one wide-range bar and one narrow-range bar on your symbol and describe who won that session."
+    },
+    {
+      "id": "volume-and-gaps",
+      "module": "stock-foundations",
+      "title": "Volume and gaps",
+      "objectives": ["Use volume to judge conviction behind a move"],
+      "sections": [
+        {
+          "heading": "Volume",
+          "body": "Rising price on strong volume suggests participation. Rising price on weak volume can be fragile. Distribution often shows as heavy volume on down days."
+        },
+        {
+          "heading": "Gaps",
+          "body": "Gaps mark imbalance between sessions. They can act as magnets (fill) or acceleration points depending on context and follow-through."
+        }
+      ],
+      "key_points": ["Volume confirms; it does not predict alone"],
+      "practice": "Compare up-day versus down-day volume on the last ten sessions."
+    },
+    {
+      "id": "trend-and-timeframes",
+      "module": "stock-foundations",
+      "title": "Trend and multiple time frames",
+      "objectives": ["Align shorter-term trades with higher-time-frame bias when possible"],
+      "sections": [
+        {
+          "heading": "Trend analysis",
+          "body": "Higher highs and higher lows define uptrends; the opposite defines downtrends. Trade with the dominant trend unless you have a specific mean-reversion plan."
+        },
+        {
+          "heading": "Multiple time frames",
+          "body": "Use a higher frame for bias (weekly/daily) and a lower frame for entries (daily/intraday). Conflicting frames increase whipsaw risk."
+        },
+        {
+          "heading": "Moving averages",
+          "body": "Moving averages smooth price. They are tools for context—dynamic support/resistance—not magic lines."
+        }
+      ],
+      "key_points": ["One time frame for direction, one for timing"],
+      "practice": "State the daily trend and whether your intended hold period matches it."
+    },
+    {
+      "id": "market-internals",
+      "module": "stock-foundations",
+      "title": "Market internals",
+      "objectives": ["Gauge broad market health beyond a single stock"],
+      "sections": [
+        {
+          "heading": "Common tools",
+          "body": "Equity put/call ratio, VIX (implied volatility of index options), TICK (NYSE uptick minus downtick), and TRIN (arms index) help describe risk appetite and breadth."
+        },
+        {
+          "heading": "Relative strength",
+          "body": "A stock outperforming its sector or index may deserve long bias; underperformance may favor caution or hedging."
+        }
+      ],
+      "key_points": ["Internals describe regime; they do not replace stock-level analysis"],
+      "practice": "Note whether VIX is rising or falling this week and what that implies for option premium."
+    },
+    {
+      "id": "money-management-basics",
+      "module": "stock-foundations",
+      "title": "Money management",
+      "objectives": ["Size positions so a normal loss does not impair decision-making"],
+      "sections": [
+        {
+          "heading": "After losing streaks",
+          "body": "Reduce size, pause new strategies, and return to checklist discipline. Revenge trading magnifies drawdowns."
+        },
+        {
+          "heading": "Position sizing",
+          "body": "Risk a small, fixed fraction of capital per idea. Define maximum loss before entry, including commissions."
+        }
+      ],
+      "key_points": ["Survival first, optimization second"],
+      "practice": "Calculate dollar risk if your stop is hit on your next stock trade."
+    },
+    {
+      "id": "calls-and-puts",
+      "module": "options-contracts",
+      "title": "Calls and puts",
+      "objectives": ["Know rights, obligations, and contract multiplier"],
+      "sections": [
+        {
+          "heading": "Definitions",
+          "body": "A call gives the buyer the right to buy the underlying at the strike before expiration. A put gives the right to sell. Sellers take the opposite obligation."
+        },
+        {
+          "heading": "Contract multiplier",
+          "body": "One standard equity option contract typically represents 100 shares. A premium of $3.00 per share is $300 per contract before fees."
+        }
+      ],
+      "key_points": ["Buy options: limited risk to premium (long). Sell options: obligation risk can be large"],
+      "practice": "Use the Options P&L simulator with one call and one put at the same strike.",
+      "related_simulator": "Options P&L simulator"
+    },
+    {
+      "id": "expiration-calendar",
+      "module": "options-contracts",
+      "title": "Expiration calendar",
+      "objectives": ["Choose expiration that matches your thesis timeline"],
+      "sections": [
+        {
+          "heading": "Monthly options",
+          "body": "Standard monthly contracts usually expire on the third Friday of the month (Thursday if Friday is a holiday)."
+        },
+        {
+          "heading": "Weeklies and 0DTE",
+          "body": "Weekly expirations exist on many liquid names. Some index products have daily expirations for short-term trading—theta decay is extreme."
+        },
+        {
+          "heading": "LEAPS",
+          "body": "Long-dated options (often nine months or more) behave like stock substitutes with less capital than buying shares outright."
+        }
+      ],
+      "key_points": ["More time costs more premium but forgives timing errors better"],
+      "practice": "Set days to expiration in the simulator and move 'days elapsed' to see theta effect."
+    },
+    {
+      "id": "option-quotes",
+      "module": "options-contracts",
+      "title": "Reading option quotes",
+      "objectives": ["Trade using bid, ask, and realistic mid prices"],
+      "sections": [
+        {
+          "heading": "Bid, ask, last, mark",
+          "body": "Bid is the best price to sell; ask is the best price to buy. Last is the most recent trade. Mark is often the midpoint reference. Buyers usually pay near the ask; sellers receive near the bid."
+        },
+        {
+          "heading": "Spreads and liquidity",
+          "body": "Tight bid/ask spreads (for example $0.01–$0.05 on liquid names) indicate better fills. Wide spreads mean hidden cost."
+        },
+        {
+          "heading": "Symbol format",
+          "body": "Modern OCC symbols encode root, expiration (YYMMDD), call/put flag, and strike (8 digits with three implied decimals)."
+        }
+      ],
+      "key_points": ["Never assume you can trade at last price"],
+      "practice": "Compare bid/ask width on your symbol's at-the-money call versus an out-of-the-money call."
+    },
+    {
+      "id": "open-interest-volume",
+      "module": "options-contracts",
+      "title": "Volume and open interest",
+      "objectives": ["Distinguish today's activity from outstanding contracts"],
+      "sections": [
+        {
+          "heading": "Day volume",
+          "body": "Contracts traded today on that strike/expiry. High volume with rising open interest often suggests new positioning."
+        },
+        {
+          "heading": "Open interest",
+          "body": "Contracts still open—not yet closed, exercised, or expired. Higher OI usually means better liquidity."
+        },
+        {
+          "heading": "Unusual activity",
+          "body": "When day volume exceeds roughly twice open interest, investigate whether large players are entering before an event."
+        }
+      ],
+      "key_points": ["OI up + volume up: new positions. OI down + volume up: closures"],
+      "practice": "Pick one chain row and note volume, OI, and spread together."
+    },
+    {
+      "id": "order-types-options",
+      "module": "options-contracts",
+      "title": "Option order language",
+      "objectives": ["Open and close positions with correct instructions"],
+      "sections": [
+        {
+          "heading": "Four core actions",
+          "body": "Buy to open (start long option), sell to open (start short option), buy to close (exit short), sell to close (exit long)."
+        },
+        {
+          "heading": "Market makers",
+          "body": "Market makers provide liquidity by quoting bid and ask. They earn the spread and help you trade when no natural counterparty is available."
+        }
+      ],
+      "key_points": ["Closing language matters—do not sell to open when you mean sell to close"],
+      "practice": "State aloud whether your next paper trade is opening or closing."
+    },
+    {
+      "id": "american-european",
+      "module": "options-contracts",
+      "title": "American vs European exercise",
+      "objectives": ["Pick valuation model and strategy with exercise style in mind"],
+      "sections": [
+        {
+          "heading": "European",
+          "body": "Exercise only at expiration. Common in index options settled for cash (no share delivery)."
+        },
+        {
+          "heading": "American",
+          "body": "Exercise allowed before expiration. Most U.S. listed equity options are American-style. Early exercise matters for deep ITM puts, dividends, and short calls."
+        }
+      ],
+      "key_points": ["Use American-style modeling for U.S. equity options when early exercise is plausible"],
+      "practice": "Toggle European vs American in the Options P&L simulator and compare deep ITM put values.",
+      "related_simulator": "Options P&L simulator"
+    },
+    {
+      "id": "intrinsic-time-value",
+      "module": "pricing-greeks",
+      "title": "Intrinsic and time value",
+      "objectives": ["Decompose premium into obvious and conditional components"],
+      "sections": [
+        {
+          "heading": "Intrinsic value",
+          "body": "For calls: max(stock − strike, 0). For puts: max(strike − stock, 0). This is immediate exercise value at expiration."
+        },
+        {
+          "heading": "Time value",
+          "body": "Premium minus intrinsic value. It reflects time, volatility, and interest/dividend carry. It decays toward zero at expiration."
+        }
+      ],
+      "key_points": ["At expiration, only intrinsic value remains"],
+      "practice": "Set simulation mode to expiration and move price across the strike."
+    },
+    {
+      "id": "iv-and-premium",
+      "module": "pricing-greeks",
+      "title": "Implied volatility and premium",
+      "objectives": ["Understand why correct direction can still lose money"],
+      "sections": [
+        {
+          "heading": "What IV represents",
+          "body": "Implied volatility is the market's embedded expectation of future movement. Higher IV means more expensive options."
+        },
+        {
+          "heading": "IV crush",
+          "body": "After events (earnings, FDA, macro shocks), IV often falls. Long options can lose value even if price barely moves."
+        },
+        {
+          "heading": "Relative IV",
+          "body": "Judge IV against its own history (percentile) and versus realized volatility—not as a single absolute number."
+        }
+      ],
+      "key_points": ["High IV favors defined-risk premium selling; low IV favors buying convexity"],
+      "practice": "Run a scenario with +0 price move and −10 vol points in the simulator."
+    },
+    {
+      "id": "greeks-overview",
+      "module": "pricing-greeks",
+      "title": "Greeks overview",
+      "objectives": ["Interpret delta, gamma, theta, vega, and rho at a practical level"],
+      "sections": [
+        {
+          "heading": "Delta",
+          "body": "Approximate change in option price for a $1 move in the stock. Calls: 0 to +1. Puts: 0 to −1."
+        },
+        {
+          "heading": "Gamma",
+          "body": "How fast delta changes when the stock moves. Highest near at-the-money close to expiration."
+        },
+        {
+          "heading": "Theta",
+          "body": "Daily time decay, all else equal. Long options usually lose theta; short options usually collect it with tail risk."
+        },
+        {
+          "heading": "Vega and rho",
+          "body": "Vega: sensitivity to a 1-point IV change. Rho: sensitivity to interest rates—more relevant for long-dated options."
+        }
+      ],
+      "key_points": ["Greeks change constantly—treat them as estimates"],
+      "practice": "Review the Greek metrics under the Options P&L simulator after changing IV and days elapsed.",
+      "related_simulator": "Options P&L simulator"
+    },
+    {
+      "id": "itm-atm-otm-selection",
+      "module": "pricing-greeks",
+      "title": "Choosing ITM, ATM, or OTM",
+      "objectives": ["Match strike to goal: hedge, income, or speculation"],
+      "sections": [
+        {
+          "heading": "Decision guide",
+          "body": "Hedging: often ITM puts or calls for higher delta. Income: ATM or OTM short options where theta is efficient. Speculation with small capital: OTM with lower probability. Strong directional view with defined risk: ATM or slight OTM spreads."
+        },
+        {
+          "heading": "ROI thinking",
+          "body": "Compare expected return on capital to probability of success. Higher delta options cost more but behave more like stock."
+        }
+      ],
+      "key_points": ["There is no single best strike—only best fit for the plan"],
+      "practice": "Model three strikes on the same expiry in the single-leg simulator."
+    },
+    {
+      "id": "rates-dividends",
+      "module": "pricing-greeks",
+      "title": "Rates and dividends",
+      "objectives": ["See how carry factors nudge call and put values"],
+      "sections": [
+        {
+          "heading": "Interest rates",
+          "body": "Higher rates tend to increase call values and decrease put values slightly because of the present value of the strike."
+        },
+        {
+          "heading": "Dividends",
+          "body": "Expected dividends reduce call values and increase put values because the stock is expected to drop on the ex-dividend date."
+        }
+      ],
+      "key_points": ["Dividend dates matter for short calls and deep ITM American options"],
+      "practice": "Adjust dividend yield in the simulator and note call vs put sensitivity."
+    },
+    {
+      "id": "regime-overview",
+      "module": "regime-framework",
+      "title": "Market regime overview",
+      "objectives": ["Start with environment, not strategy name"],
+      "sections": [
+        {
+          "heading": "Three regimes",
+          "body": "Risk-on: volatility often falls, growth leads, dips get bought. Neutral/defensive: chop, elevated IV, earnings sold. Risk-off: correlations rise, IV spikes, capital preservation first."
+        },
+        {
+          "heading": "Macro vs flow",
+          "body": "Macro sets the backdrop (rates, growth, policy). Flow is how money actually moves—what you trade against."
+        }
+      ],
+      "key_points": ["The market pays for adapting to context, not for having an opinion"],
+      "practice": "Label today's session as risk-on, neutral, or risk-off with one reason."
+    },
+    {
+      "id": "volatility-regimes",
+      "module": "regime-framework",
+      "title": "Volatility regimes",
+      "objectives": ["Link VIX direction to strategy families"],
+      "sections": [
+        {
+          "heading": "VIX as thermometer",
+          "body": "Falling VIX often supports risk-on behavior. Stable mid-range VIX suits income structures. Rising VIX favors protection and smaller size."
+        },
+        {
+          "heading": "High vs low IV on the stock",
+          "body": "High IV: favor defined-risk credit structures if you expect stability. Low IV: favor buying options or spreads for convexity."
+        }
+      ],
+      "key_points": ["Do not buy expensive options without a catalyst for movement"],
+      "practice": "Open Market scenario lab and pick rules matching today's regime."
+    },
+    {
+      "id": "iv-classification",
+      "module": "regime-framework",
+      "title": "Classifying implied volatility",
+      "objectives": ["Judge IV relative to history and the underlying"],
+      "sections": [
+        {
+          "heading": "Rough scale (equity context)",
+          "body": "Below ~25% can be low for many large caps. 25–45% is common. Above ~45–50% is elevated. Above ~70% is extreme/event-driven. Always compare to the symbol's own history."
+        },
+        {
+          "heading": "IV vs realized",
+          "body": "IV above realized volatility by several points: options expensive. IV below realized: options relatively cheap."
+        }
+      ],
+      "key_points": ["Sector matters—tech and biotech run higher than utilities"],
+      "practice": "Note your symbol's IV % in the strategy lab and classify it low/medium/high."
+    },
+    {
+      "id": "regime-decision-map",
+      "module": "regime-framework",
+      "title": "If this, then that",
+      "objectives": ["Map conditions to stock + option structures"],
+      "sections": [
+        {
+          "heading": "Risk-on",
+          "body": "Favor stock, call spreads, long calls, momentum entries. Avoid aggressive premium selling that caps upside too early."
+        },
+        {
+          "heading": "Neutral + high IV",
+          "body": "Favor covered calls, put credit spreads, iron condors, diagonals—structures that earn theta with defined risk."
+        },
+        {
+          "heading": "Risk-off",
+          "body": "Reduce size, hold cash, buy puts, use collars, avoid heroics. Survival beats brilliance."
+        }
+      ],
+      "key_points": ["Structure beats direction when the market is uncertain"],
+      "practice": "Complete the pre-trade checklist before your next options trade."
+    },
+    {
+      "id": "stock-vs-call",
+      "module": "core-strategies",
+      "title": "Stock vs long call",
+      "objectives": ["Compare linear stock risk to leveraged option risk"],
+      "sections": [
+        {
+          "heading": "Long stock",
+          "body": "Full upside and downside per share. Capital intensive. No expiration."
+        },
+        {
+          "heading": "Long call",
+          "body": "Smaller upfront cost, maximum loss usually limited to premium, but requires direction, timing, and often favorable IV."
+        }
+      ],
+      "key_points": ["Calls are not 'cheap stock'—they are a bet on path and time"],
+      "practice": "Compare stock simulator P&L vs call simulator P&L for the same % move.",
+      "related_simulator": "Stock P&L simulator"
+    },
+    {
+      "id": "protective-put",
+      "module": "core-strategies",
+      "title": "Protective put",
+      "objectives": ["Insure a stock position with defined downside"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Own shares plus buy a put. You keep upside minus premium; downside is cushioned below the strike."
+        },
+        {
+          "heading": "When it fits",
+          "body": "Before earnings, during macro stress, or when you want to hold shares but fear a near-term drawdown."
+        }
+      ],
+      "key_points": ["Insurance has a cost—break-even moves up by the premium paid"],
+      "practice": "Load the protective put template in Strategy payoff lab.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "covered-call",
+      "module": "core-strategies",
+      "title": "Covered call",
+      "objectives": ["Generate income on stock you are willing to sell higher"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Own at least 100 shares per contract and sell a call against them. Collect premium; cap upside at strike plus premium."
+        },
+        {
+          "heading": "When it fits",
+          "body": "Neutral to mildly bullish view, medium/high IV, willingness to sell shares at the strike."
+        }
+      ],
+      "key_points": ["Does not remove downside risk on the stock—only partially offsets with premium"],
+      "practice": "Try covered call template; move price down and up in the scenario slider.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "cash-secured-put",
+      "module": "core-strategies",
+      "title": "Cash-secured put",
+      "objectives": ["Get paid to wait for a lower entry price"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Sell a put and reserve cash to buy stock if assigned. Keep premium if stock stays above strike."
+        },
+        {
+          "heading": "Risk",
+          "body": "If stock falls far below strike, you buy at an effective price of strike minus premium—but still face further losses if shares keep dropping."
+        }
+      ],
+      "key_points": ["Only sell puts on names you want to own at the strike"],
+      "practice": "Model assignment scenarios in Strategy payoff lab with Custom legs.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "vertical-credit-spreads",
+      "module": "core-strategies",
+      "title": "Vertical credit spreads",
+      "objectives": ["Earn premium with capped risk"],
+      "sections": [
+        {
+          "heading": "Bull put spread",
+          "body": "Sell put at higher strike, buy put at lower strike. Bullish to neutral. Max gain is net credit; max loss is width minus credit."
+        },
+        {
+          "heading": "Bear call spread",
+          "body": "Sell call at lower strike, buy call at higher strike. Bearish to neutral. Same credit-spread mechanics."
+        }
+      ],
+      "key_points": ["Close winners before expiration—do not need max profit to be successful"],
+      "practice": "Load bull call spread and bear put spread templates and compare payoff shapes.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "iron-condor",
+      "module": "core-strategies",
+      "title": "Iron condor",
+      "objectives": ["Profit from range-bound prices with defined risk"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Combine bull put spread below the market and bear call spread above. Profit if price finishes between short strikes."
+        },
+        {
+          "heading": "When it fits",
+          "body": "Low expected movement, elevated IV, neutral outlook. Watch gap risk through the range."
+        }
+      ],
+      "key_points": ["Max loss occurs outside the long strikes—know that dollar amount before entry"],
+      "practice": "Use iron butterfly / iron condor templates and test prices outside the range.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "straddle-strangle",
+      "module": "core-strategies",
+      "title": "Straddle and strangle",
+      "objectives": ["Trade expected large moves without picking direction"],
+      "sections": [
+        {
+          "heading": "Long straddle",
+          "body": "Buy call and put at same strike. Needs a large move to overcome double premium and theta."
+        },
+        {
+          "heading": "Long strangle",
+          "body": "Buy OTM call and OTM put. Cheaper but needs an even larger move."
+        }
+      ],
+      "key_points": ["Best when IV is relatively low before a known catalyst"],
+      "practice": "Long straddle template with before-expiration Greek mode.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "collar",
+      "module": "advanced-structures",
+      "title": "Collar",
+      "objectives": ["Protect stock while financing part of the put with a short call"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Long stock, long put, short call. Creates a band of outcomes between put floor and call ceiling."
+        },
+        {
+          "heading": "When it fits",
+          "body": "After a large gain, into an uncertain period, or when you want defined risk without selling shares."
+        }
+      ],
+      "key_points": ["Net cost depends on put vs call premium—can be near zero cost"],
+      "practice": "Collar template in Strategy payoff lab.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "diagonal-calls",
+      "module": "advanced-structures",
+      "title": "Diagonal call spread",
+      "objectives": ["Finance long-dated exposure by selling short-dated calls"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Buy longer-dated call (lower strike or same), sell shorter-dated call nearer the money. Collect theta on the short leg while keeping convexity on the long leg."
+        },
+        {
+          "heading": "Management",
+          "body": "If price is flat: let short call decay and resell. If price rips: close short leg first, let long run. If price drops: decide whether thesis is intact before reselling calls."
+        }
+      ],
+      "key_points": ["Short leg may require margin—check broker requirements"],
+      "practice": "Custom legs: long call 90 DTE, short call 30 DTE; test three price paths.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "stock-call-spread",
+      "module": "advanced-structures",
+      "title": "Stock plus bull call spread",
+      "objectives": ["Combine stock anchor with defined-risk option leverage"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Own shares for core delta. Add bull call spread (buy ITM or ATM call, sell OTM call) for additional upside with capped option risk."
+        },
+        {
+          "heading": "Management",
+          "body": "If price rallies hard, consider closing spread at 80–90% of max value, keeping stock, then selling covered calls higher."
+        }
+      ],
+      "key_points": ["Stock provides patience; spread provides efficiency"],
+      "practice": "Build stock + two call legs in Custom strategy table.",
+      "related_simulator": "Strategy payoff lab"
+    },
+    {
+      "id": "leaps-short-call",
+      "module": "advanced-structures",
+      "title": "LEAPS with short call",
+      "objectives": ["Stock substitute with income overlay"],
+      "sections": [
+        {
+          "heading": "Structure",
+          "body": "Buy long-dated call (LEAPS) instead of all cash stock. Periodically sell short-dated calls against it (diagonal/calendar style)."
+        },
+        {
+          "heading": "When it fits",
+          "body": "Bullish long-term view but want lower capital tie-up and willing to manage short calls."
+        }
+      ],
+      "key_points": ["LEAPS still suffer from IV and time if thesis delays"],
+      "practice": "Compare LEAPS debit vs stock purchase in a spreadsheet using simulator premiums.",
+      "related_simulator": "Options P&L simulator"
+    },
+    {
+      "id": "rolling-covered-calls",
+      "module": "trade-management",
+      "title": "Rolling covered calls",
+      "objectives": ["Adjust strikes and time when price approaches short call"],
+      "sections": [
+        {
+          "heading": "Roll up",
+          "body": "Close current short call and sell higher strike, same expiry—recover upside when stock rises."
+        },
+        {
+          "heading": "Roll out",
+          "body": "Same strike, later expiry—collect more premium when price is sticky near strike."
+        },
+        {
+          "heading": "When not to roll",
+          "body": "If assignment at strike is acceptable or rolling costs erase edge, let shares be called away."
+        }
+      ],
+      "key_points": ["Roll only if math improves expected outcome—not from fear alone"],
+      "practice": "Paper-trade a roll when stock crosses 90% of your short strike."
+    },
+    {
+      "id": "diagonal-management",
+      "module": "trade-management",
+      "title": "Managing diagonals",
+      "objectives": ["Protect the long leg; treat the short leg as disposable on squeezes"],
+      "sections": [
+        {
+          "heading": "Flat market",
+          "body": "Let short option decay; resell after expiration if thesis intact."
+        },
+        {
+          "heading": "Strong rally",
+          "body": "Close short call quickly; optional: sell far OTM call only if IV is extreme."
+        },
+        {
+          "heading": "Decline",
+          "body": "Let short expire worthless if possible; reassess long call or sell new lower call only if still bullish."
+        }
+      ],
+      "key_points": ["Never defend the short leg by sacrificing the long leg"],
+      "practice": "List your action for each of three scenarios before entering a diagonal."
+    },
+    {
+      "id": "close-spread-winners",
+      "module": "trade-management",
+      "title": "Closing spreads at a profit",
+      "objectives": ["Bank gains without needing maximum theoretical value"],
+      "sections": [
+        {
+          "heading": "Credit spreads",
+          "body": "Many traders close at 50–80% of max profit to reduce gamma risk into expiration."
+        },
+        {
+          "heading": "How to close",
+          "body": "Use a single combo order (buy back short, sell long) when possible for cleaner fills."
+        }
+      ],
+      "key_points": ["Close the entire spread—do not leave one naked leg"],
+      "practice": "Identify max profit on your spread and set a profit-taking level at 70%."
+    },
+    {
+      "id": "margin-awareness",
+      "module": "trade-management",
+      "title": "Margin on short options",
+      "objectives": ["Understand why short legs tie up buying power"],
+      "sections": [
+        {
+          "heading": "Naked short options",
+          "body": "Highest margin—avoid unless intentional and capitalized."
+        },
+        {
+          "heading": "Spreads and diagonals",
+          "body": "Defined-risk spreads often use less margin than naked shorts. Diagonals may still reserve margin on the short leg—verify with broker."
+        },
+        {
+          "heading": "Covered call",
+          "body": "Stock ownership covers the call—no additional short-call margin if fully covered."
+        }
+      ],
+      "key_points": ["Check margin impact before entry, not after a squeeze"],
+      "practice": "Note which legs in your strategy table are short options."
+    },
+    {
+      "id": "pre-trade-questions",
+      "module": "trade-management",
+      "title": "Pre-trade questions",
+      "objectives": ["Force discipline before capital is at risk"],
+      "sections": [
+        {
+          "heading": "Checklist",
+          "body": "What is the regime? Is IV cheap or expensive? What is my max loss? What proves me wrong? What happens if price does nothing? Does this match my time horizon?"
+        }
+      ],
+      "key_points": ["If you cannot answer clearly, wait"],
+      "practice": "Use the Pre-trade checklist page before every new options structure."
+    }
+  ],
+  "strategy_playbook": [
+    {
+      "id": "bullish-long-call",
+      "name": "Long call",
+      "market_bias": "Bullish",
+      "iv_bias": "Low to medium",
+      "structure": "Buy call",
+      "when_to_use": "Moderate upside view, willing to risk full premium, catalyst within the option's life.",
+      "risks": "Time decay and IV drop can hurt even if direction is right.",
+      "template": null
+    },
+    {
+      "id": "bullish-bull-call-spread",
+      "name": "Bull call spread",
+      "market_bias": "Bullish",
+      "iv_bias": "Medium to high",
+      "structure": "Buy call, sell higher call",
+      "when_to_use": "Defined-risk bullish bet with lower cost than naked call.",
+      "risks": "Upside capped at short strike.",
+      "template": "Bull call spread"
+    },
+    {
+      "id": "bullish-covered-call",
+      "name": "Covered call",
+      "market_bias": "Neutral to mildly bullish",
+      "iv_bias": "Medium to high",
+      "structure": "Long stock, short call",
+      "when_to_use": "Income on shares you own; okay selling at strike.",
+      "risks": "Stock can fall more than premium collected.",
+      "template": "Covered call"
+    },
+    {
+      "id": "bullish-csp",
+      "name": "Cash-secured put",
+      "market_bias": "Neutral to mildly bullish",
+      "iv_bias": "Medium to high",
+      "structure": "Short put with cash reserved",
+      "when_to_use": "Want to buy stock lower and earn premium while waiting.",
+      "risks": "Assignment into a falling stock.",
+      "template": "Custom"
+    },
+    {
+      "id": "bearish-long-put",
+      "name": "Long put",
+      "market_bias": "Bearish",
+      "iv_bias": "Low to medium",
+      "structure": "Buy put",
+      "when_to_use": "Downside view with limited premium risk.",
+      "risks": "Timing and IV crush after events.",
+      "template": null
+    },
+    {
+      "id": "bearish-bear-put-spread",
+      "name": "Bear put spread",
+      "market_bias": "Bearish",
+      "iv_bias": "Medium to high",
+      "structure": "Buy put, sell lower put",
+      "when_to_use": "Defined-risk bearish trade.",
+      "risks": "Profit capped at spread width.",
+      "template": "Bear put spread"
+    },
+    {
+      "id": "neutral-iron-condor",
+      "name": "Iron condor",
+      "market_bias": "Neutral",
+      "iv_bias": "High",
+      "structure": "Bull put spread + bear call spread",
+      "when_to_use": "Expect price to stay in a range; IV elevated.",
+      "risks": "Gap moves outside long strikes.",
+      "template": "Iron butterfly"
+    },
+    {
+      "id": "vol-long-straddle",
+      "name": "Long straddle",
+      "market_bias": "Neutral direction, high movement expected",
+      "iv_bias": "Low before event",
+      "structure": "Buy call and put same strike",
+      "when_to_use": "Binary or large move expected, direction unclear.",
+      "risks": "Theta and post-event IV crush.",
+      "template": "Long straddle"
+    },
+    {
+      "id": "hedge-protective-put",
+      "name": "Protective put",
+      "market_bias": "Bullish but defensive",
+      "iv_bias": "Any",
+      "structure": "Long stock, long put",
+      "when_to_use": "Hold shares but limit near-term downside.",
+      "risks": "Premium reduces net returns.",
+      "template": "Protective put"
+    },
+    {
+      "id": "hedge-collar",
+      "name": "Collar",
+      "market_bias": "Cautious long",
+      "iv_bias": "Medium to high",
+      "structure": "Long stock, long put, short call",
+      "when_to_use": "Define a outcome band after gains or into uncertainty.",
+      "risks": "Upside capped by short call.",
+      "template": "Collar"
+    }
+  ],
+  "checklists": [
+    {
+      "id": "daily-regime",
+      "title": "Daily regime check",
+      "items": [
+        "Is VIX rising, falling, or stable?",
+        "Are more stocks advancing than declining?",
+        "Is growth or defensives leading?",
+        "Are bad headlines ignored or punished?",
+        "Is my symbol's IV above or below its recent average?"
+      ]
+    },
+    {
+      "id": "pre-trade-options",
+      "title": "Pre-trade options checklist",
+      "items": [
+        "What regime am I in (risk-on, neutral, risk-off)?",
+        "Is IV cheap, fair, or expensive for this symbol?",
+        "What is my maximum loss in dollars?",
+        "What price or date proves me wrong?",
+        "What happens if the stock does not move?",
+        "Are bid/ask spreads acceptable?",
+        "Does expiration match my catalyst timeline?",
+        "Have I modeled the trade in the payoff simulator?"
+      ]
+    },
+    {
+      "id": "covered-call-mgmt",
+      "title": "Covered call management",
+      "items": [
+        "Is IV still high enough to justify a new sale?",
+        "Is the stock near resistance?",
+        "If price exceeds strike, will I roll, accept assignment, or close?",
+        "Did I calculate roll credit/debit before acting?"
+      ]
+    }
+  ]
+}
