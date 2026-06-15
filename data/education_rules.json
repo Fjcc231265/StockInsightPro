@@ -1,85 +1,180 @@
 {
   "rules": [
     {
-      "id": "sideways-options-wait",
-      "title": "Sideways markets reward patience",
-      "market_regime": "Sideways",
-      "instrument": "Options",
-      "lesson": "When price is moving sideways and implied volatility is high, short-term option buyers can lose money from time decay even if the stock does not move against them.",
-      "example": "If a stock stays near the same price for several days, a long call can lose value because expiration is getting closer.",
-      "risk_note": "Waiting for a breakout, selling premium only with defined risk, or using spreads can reduce exposure to time decay."
-    },
-    {
-      "id": "bullish-stock-vs-call",
-      "title": "Bullish views can be expressed with stock or calls",
-      "market_regime": "Bullish",
+      "id": "decision-flow-order",
+      "title": "Follow the decision flow in order",
+      "market_regime": "All regimes",
       "instrument": "Stocks and Options",
-      "lesson": "Buying stock gives linear upside and downside. Buying calls gives leveraged upside but can expire worthless.",
-      "example": "A 5% stock rally benefits both a long stock position and a long call, but the call also depends on strike, premium, volatility, and time.",
-      "risk_note": "Options require direction, timing, and magnitude to be sufficiently favorable."
+      "lesson": "Do not jump straight to a favorite strategy. First diagnose the market regime, then choose a structure in Strategy playbook, then validate with Pre-trade checklist, and finally confirm you are not breaking a permanent rule here in Rules playbook. Skipping steps is how traders force trades that do not fit the environment.",
+      "example": "Example: you like selling iron condors, but the market is risk-on with strong breakouts. The regime says directional exposure may work better. Strategy playbook may point to bull call spreads. Checklist confirms max loss and expiration. Rules playbook reminds you not to sell premium that caps upside in a strong trend.",
+      "action": "Regime -> Strategy -> Checklist -> Rules. If any layer says no, revise or skip.",
+      "avoid": "Opening a trade because you already decided on the structure before reading the market.",
+      "risk_note": "A good structure in the wrong regime is still a bad trade."
     },
     {
-      "id": "bearish-risk-defined",
-      "title": "Bearish trades should define risk before entry",
-      "market_regime": "Bearish",
-      "instrument": "Options",
-      "lesson": "Long puts and put spreads can express downside views with defined maximum loss.",
-      "example": "A long put can gain if the stock falls below strike minus premium before expiration.",
-      "risk_note": "Short options or uncovered bearish trades can create large losses if risk is not capped."
-    },
-    {
-      "id": "volatility-premium",
-      "title": "High implied volatility changes the trade",
-      "market_regime": "High volatility",
-      "instrument": "Options",
-      "lesson": "High implied volatility makes options more expensive. Buyers need a larger move to overcome premium paid.",
-      "example": "A call may be directionally correct but still lose money if implied volatility drops after entry.",
-      "risk_note": "Compare expected move, break-even price, and position sizing before entering."
+      "id": "position-size-cap",
+      "title": "Cap risk per trade before choosing strikes",
+      "market_regime": "All regimes",
+      "instrument": "Stocks and Options",
+      "lesson": "Position size should be based on maximum dollar loss, not on how confident you feel. For options, translate premium or spread width into total dollars before entry. A trade that risks 10% of the account can be correct directionally and still damage the portfolio.",
+      "example": "Example: account is $25,000. A bull call spread risks $350 per spread. Three spreads risk $1,050, or 4.2% of the account. That may be acceptable. Ten spreads risk $3,500, or 14%, which is likely too large even if the chart looks perfect.",
+      "action": "Write max loss in dollars and as a percent of account before sending the order.",
+      "avoid": "Sizing from contract count alone without calculating total risk.",
+      "risk_note": "Options make small per-share numbers look harmless until contracts are multiplied by 100."
     },
     {
       "id": "risk-on-direction",
       "title": "Risk-on favors directional long exposure",
       "market_regime": "Bullish",
       "instrument": "Stocks and Options",
-      "lesson": "When volatility is falling and growth stocks lead, directional long stock, call spreads, and momentum setups tend to work better than aggressive premium selling.",
-      "example": "A broad rally with VIX declining often lifts calls and reduces fear premium faster than sideways income trades capture.",
-      "risk_note": "Do not cap upside too early with tight covered calls if you expect a sustained trend."
+      "lesson": "When indexes trend higher, VIX is stable or falling, breadth is positive, and growth or leadership sectors outperform, the market is rewarding upside participation. In this environment, long stock, long calls, and bull call spreads often fit better than aggressive premium selling that caps upside too early.",
+      "example": "Example: SPY holds above rising moving averages, VIX falls from 20 to 16, and a stock breaks out above $100 resistance with volume. A 100/110 bull call spread for $3 debit risks $300 and targets a realistic move. Selling a tight 105 covered call may collect $1.50 but cap gains if the stock runs to $120.",
+      "action": "Look for breakouts, leadership, and structures with upside room. Compare stock vs call vs bull call spread.",
+      "avoid": "Selling calls too tight simply because premium looks attractive.",
+      "risk_note": "Risk-on can reverse quickly after events. Size for invalidation, not for maximum optimism."
     },
     {
-      "id": "neutral-income",
-      "title": "Neutral markets favor structured income",
-      "market_regime": "Sideways",
+      "id": "bullish-stock-vs-call",
+      "title": "Bullish views can be expressed with stock or calls",
+      "market_regime": "Bullish",
       "instrument": "Stocks and Options",
-      "lesson": "Choppy markets with elevated IV reward defined-risk credit structures: covered calls, put spreads, iron condors, and diagonals that harvest time decay.",
-      "example": "If price stays in a range for weeks, an iron condor can profit while a long straddle loses premium to theta.",
-      "risk_note": "Gap risk can still break ranges—size positions for loss outside the long strikes."
+      "lesson": "Stock gives linear upside and downside and no expiration. Calls give leverage and defined risk but require direction, timing, and enough magnitude to beat premium and theta. In risk-on markets with low to medium IV, calls can be efficient. In strong trends where you want to hold through noise, stock may be simpler.",
+      "example": "Example: stock at $100 rises to $110. Long stock gains $10 per share, or $1,000 on 100 shares. A 100 call bought for $4 may rise toward $10 intrinsic plus remaining time value, but if the move takes too long, theta can reduce the gain. Stock wins on slow grinds; calls need the move to happen on schedule.",
+      "action": "Choose stock when you want time on your side. Choose calls when capital is limited and IV is not excessive.",
+      "avoid": "Buying expensive calls without a catalyst timeline.",
+      "risk_note": "Being right on direction but wrong on timing is a common call buyer loss."
+    },
+    {
+      "id": "bearish-risk-defined",
+      "title": "Bearish trades should define risk before entry",
+      "market_regime": "Bearish",
+      "instrument": "Options",
+      "lesson": "In risk-off markets, support breaks, rallies fail, and volatility often rises. Bearish exposure should usually be defined-risk: long puts, bear put spreads, or hedges on stock you already own. Undefined short structures can create margin stress and gap risk.",
+      "example": "Example: stock breaks $100 support and you expect $90. Buy the 100 put for $5 or buy a 100/90 bear put spread for $3. Max loss is known. Selling naked calls or oversized short puts without a plan can create losses far larger than expected if the stock rebounds sharply.",
+      "action": "Define max loss, invalidation above resistance, and whether you need hedge vs directional bearish bet.",
+      "avoid": "Oversized bearish bets when VIX is already extremely elevated unless you expect further downside beyond premium priced in.",
+      "risk_note": "Bearish trades can still lose from timing, IV crush after events, or sharp short-covering rallies."
     },
     {
       "id": "protective-put-insurance",
       "title": "Protective puts are insurance, not a trade idea",
       "market_regime": "Bearish",
       "instrument": "Stocks and Options",
-      "lesson": "A protective put limits downside on stock you already own. You pay premium for peace of mind before events or during stress.",
-      "example": "Stock down 10% may cost $1,000; with a put, loss can be closer to premium paid if strike is near the money.",
-      "risk_note": "Insurance raises break-even—only buy protection when the thesis requires holding through risk."
+      "lesson": "A protective put protects stock you already want to keep. It is insurance against a drawdown, not a standalone bullish or bearish speculation. Use it when you must hold shares through earnings, macro risk, or a risk-off transition and want a floor.",
+      "example": "Example: own 100 shares at $100 and buy a 95 put for $3. If the stock falls to $80, the put gains value below $95 and cushions the loss. If the stock rallies to $115, you keep upside minus the $300 insurance cost. The put reduced return but defined worst-case near the strike zone.",
+      "action": "Match strike to the drawdown you can tolerate. Decide in advance whether to monetize the put or keep shares.",
+      "avoid": "Buying protection so expensive that you would have been better off simply reducing share size.",
+      "risk_note": "Far OTM puts are cheap but may not protect until after a large loss."
     },
     {
-      "id": "liquidity-spreads",
-      "title": "Liquidity is part of the trade",
-      "market_regime": "High volatility",
+      "id": "neutral-income",
+      "title": "Neutral markets favor structured income",
+      "market_regime": "Sideways",
+      "instrument": "Stocks and Options",
+      "lesson": "When price respects support and resistance, trend is unclear, and IV is elevated, defined-risk premium selling can work: covered calls, cash-secured puts, credit spreads, iron condors, and some diagonals. The edge is time decay and range behavior, not a large directional move.",
+      "example": "Example: stock oscillates between $92 and $108 for weeks with IV at the upper end of its range. An iron condor with short strikes outside the range may collect $2.00 credit with $3.00 max loss. A long straddle bought for $8 needs a move beyond $92 or $108 just to break even at expiration.",
+      "action": "Place short strikes beyond real support/resistance. Size for gap risk outside the range.",
+      "avoid": "Selling undefined-risk premium because credit looks attractive.",
+      "risk_note": "Ranges break. One gap can cost more than weeks of collected premium."
+    },
+    {
+      "id": "sideways-options-wait",
+      "title": "Sideways markets punish impatient option buyers",
+      "market_regime": "Sideways",
       "instrument": "Options",
-      "lesson": "Wide bid/ask spreads and low open interest increase real cost. Prefer contracts with tight markets and visible volume.",
-      "example": "Paying $0.30 wide on a $1.00 option is a 30% round-trip handicap before the stock moves.",
-      "risk_note": "Use mid prices for estimates but assume fills near bid when selling and ask when buying."
+      "lesson": "When price chops sideways and IV is high, long options can lose value from theta even if direction is not wrong. The stock can sit near the same price while premium bleeds. Waiting for a catalyst, using spreads to reduce cost, or selling defined-risk premium may fit better than repeated ATM call buying.",
+      "example": "Example: stock stays near $100 for ten days. A 100 call bought for $4 may fall to $2.80 even with no meaningful price change because time passed and IV softened. The trader was not wrong on direction, but the market did not move enough soon enough.",
+      "action": "Ask what catalyst will move price within your expiration. If none, wait or change structure.",
+      "avoid": "Buying calls repeatedly in a range simply because the chart looks like it should break soon.",
+      "risk_note": "Hope is not a catalyst."
     },
     {
       "id": "close-winners-early",
       "title": "Credit spreads do not need max profit",
       "market_regime": "Sideways",
       "instrument": "Options",
-      "lesson": "Closing credit spreads at 50–80% of maximum profit reduces gamma risk into expiration.",
-      "example": "A spread opened for $2.00 credit might be closed for $0.50 debit instead of waiting for full decay.",
-      "risk_note": "Always close both legs together with a combo order when possible."
+      "lesson": "Credit spreads and iron condors often reach most of their profit well before expiration. Closing at 50-80% of max profit reduces gamma risk, assignment complications, and the chance of a late reversal erasing gains.",
+      "example": "Example: sell a put credit spread for $2.00 credit. When it can be closed for a $0.50 debit, you kept $1.50, or 75% of max profit. Waiting for the last $0.50 can expose you to a reversal that turns a winner into a loser.",
+      "action": "Set a profit-taking rule at entry. Use combo orders to close both legs together.",
+      "avoid": "Leaving one leg open after closing the other.",
+      "risk_note": "Near expiration, short options become more sensitive to small price moves."
+    },
+    {
+      "id": "volatility-premium",
+      "title": "High implied volatility changes the trade",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "High IV makes options expensive. Buyers need a larger move to win. Sellers collect more premium but face larger gap and expansion risk. Always compare the option-implied expected move to your actual thesis before entering.",
+      "example": "Example: stock at $100 with earnings approaching. ATM straddle prices a $12 move. If you buy calls for $6 each wing, you need a huge move. If you sell an iron condor for $2.50, the credit is attractive, but one surprise gap can exceed weeks of income.",
+      "action": "Classify IV as cheap, fair, expensive, or event-driven. Match structure to IV, not just direction.",
+      "avoid": "Buying expensive long options without a catalyst that can exceed the priced move.",
+      "risk_note": "IV crush after events can hurt long premium even when direction is correct."
+    },
+    {
+      "id": "liquidity-spreads",
+      "title": "Liquidity is part of the trade",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "Bid/ask spread, volume, and open interest affect real execution cost. A good thesis with a bad market can lose before the stock moves. Prefer strikes and expirations with tight markets and visible activity.",
+      "example": "Example: an option quotes $1.00 bid / $1.30 ask. Buying at ask and later selling near bid costs $0.30 per share, or $30 per contract, before commissions. On a $1.00 option that is a 30% hurdle. A liquid strike might quote $2.40 / $2.45 instead.",
+      "action": "Check spread width, volume, and open interest. Use mid for estimates, but plan for realistic fills.",
+      "avoid": "Illiquid far OTM contracts with wide spreads unless size is tiny and thesis is very long-dated.",
+      "risk_note": "Slippage is a hidden tax on every entry and exit."
+    },
+    {
+      "id": "earnings-binary-risk",
+      "title": "Treat earnings as a separate regime",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "Earnings are event-driven. IV often rises into the report and can crush afterward. Directional long premium needs a move larger than the straddle-implied move. Short premium needs acceptance of gap risk and possible assignment.",
+      "example": "Example: stock at $100, straddle costs $8 into earnings. A 100 straddle buyer needs a move beyond $92 or $108 at expiration to break even, and IV crush can hurt even after a decent move. A seller collecting $2 on a wide iron condor can lose far more than $2 if the stock gaps 12%.",
+      "action": "Read the implied move. Decide before entry whether you are betting on magnitude, direction, or selling overpriced fear.",
+      "avoid": "Accidentally holding short options through earnings without planning for a gap.",
+      "risk_note": "Earnings gaps ignore technical levels."
+    },
+    {
+      "id": "no-revenge-trading",
+      "title": "Do not increase size after a loss",
+      "market_regime": "All regimes",
+      "instrument": "Stocks and Options",
+      "lesson": "After a losing trade, the next decision should not be larger size to get even quickly. Revenge trading turns one defined loss into a portfolio problem. Return to regime diagnosis and checklist instead of emotional escalation.",
+      "example": "Example: lose $400 on a call spread, then open five more spreads immediately because the stock still looks bullish. If the regime has changed or the entry is late, the new trade risks $2,000. One loss becomes several.",
+      "action": "Stop, re-check regime, rewrite thesis, and keep the next trade at normal size or smaller.",
+      "avoid": "Doubling size, averaging down on options, or forcing a trade because you feel behind.",
+      "risk_note": "Discipline is part of edge."
+    },
+    {
+      "id": "invalidation-required",
+      "title": "Every trade needs an invalidation level",
+      "market_regime": "All regimes",
+      "instrument": "Stocks and Options",
+      "lesson": "Before entry, define what price action or time condition proves the thesis wrong. Without invalidation, losses tend to become hope trades. For options, also define a time stop because theta can erode value even without a price stop.",
+      "example": "Example: buy a breakout call with stock at $102 after clearing $100 resistance. Invalidation is a close back below $100. If that happens in three days, exit even if some premium remains. Waiting for expiration turns a small tactical loss into a full premium loss.",
+      "action": "Write price invalidation, time stop, and profit-taking level before entry.",
+      "avoid": "Moving stops farther away or adding size when the original thesis is already broken.",
+      "risk_note": "If you cannot define invalidation, you do not have a plan."
+    },
+    {
+      "id": "margin-buffer",
+      "title": "Keep buying-power buffer for stress",
+      "market_regime": "High volatility",
+      "instrument": "Options",
+      "lesson": "Short options and some multi-leg structures tie up buying power. Margin requirements can rise when volatility expands or positions move against you. Using all available buying power leaves no room to manage losers calmly.",
+      "example": "Example: account has $20,000 and you deploy structures using $18,000 of buying power. A volatility spike increases requirements and mark-to-market losses at the same time. The broker may force reductions at the worst moment.",
+      "action": "Preview margin impact before entry and keep unused buying-power buffer.",
+      "avoid": "Stacking multiple short-premium trades that look small individually but stress the account together.",
+      "risk_note": "Liquidity problems force bad decisions."
+    },
+    {
+      "id": "assignment-awareness",
+      "title": "Plan for assignment on short options",
+      "market_regime": "All regimes",
+      "instrument": "Options",
+      "lesson": "Short calls and short puts can be assigned, especially near expiration or around dividends. Assignment is not always bad, but it must be intended. Covered calls require shares. Cash-secured puts require cash readiness. Spreads should be closed before unintended naked exposure appears.",
+      "example": "Example: you sell a 95 put expecting to own stock at $95. Stock closes at $94.50 on expiration Friday. Assignment is likely. If you only wanted premium and not shares, you should have closed earlier. On covered calls, assignment means selling shares at the strike.",
+      "action": "Know whether assignment is acceptable before selling the option. Monitor ex-dividend dates on short calls.",
+      "avoid": "Letting spreads expire without checking whether one leg may remain naked.",
+      "risk_note": "Assignment turns an option position into stock or cash obligation."
     }
   ]
 }

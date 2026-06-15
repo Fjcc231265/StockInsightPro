@@ -25,6 +25,12 @@ from ui.components.page_router import render_submenu_page
 from ui.education_lesson_visuals import render_lesson_visuals, render_strategy_playbook_visuals, render_visual_keys
 from utils.constants import COLORS
 
+
+def _escape_markdown_math(text: object) -> str:
+    """Keep literal dollar amounts from being interpreted as inline LaTeX."""
+    return str(text).replace("$", r"\$")
+
+
 _SIMULATOR_TOOLKIT: dict[str, str] = {
     "implied_volatility": (
         "Market-implied expected volatility for this option, as an annualized percentage. "
@@ -80,8 +86,8 @@ def render(submenu: str) -> None:
     handlers = {
         "Learning roadmap": _learning_roadmap,
         "Lesson library": _lesson_library,
-        "Strategy playbook": _strategy_playbook_page,
         "Market regime guide": _market_regime_guide,
+        "Strategy playbook": _strategy_playbook_page,
         "Pre-trade checklist": _pre_trade_checklist,
         "Rules playbook": _rules_playbook,
         "Stock P&L simulator": _stock_pnl_simulator,
@@ -191,10 +197,15 @@ def _learning_roadmap() -> None:
     for index, module in enumerate(modules, start=1):
         title = module.get("title", "Module")
         summary = module.get("summary", "")
+        focus_items = module.get("focus", [])
         lesson_ids = module.get("lesson_ids", [])
         simulators = module.get("recommended_simulators", [])
         with st.expander(f"{index}. {title}", expanded=index == 1):
             st.write(summary)
+            if focus_items:
+                st.markdown("**What this module connects**")
+                for item in focus_items:
+                    st.markdown(f"- {item}")
             if lesson_ids:
                 st.markdown("**Lessons in this module**")
                 for lesson_id in lesson_ids:
@@ -223,28 +234,57 @@ def _lesson_library() -> None:
         st.warning("No curriculum modules loaded.")
         return
 
-    module_options = {str(m["id"]): f"{m.get('order', '')}. {m.get('title', m['id'])}" for m in modules}
+    module_options = {"all": "All modules in roadmap order"}
+    module_options.update({str(m["id"]): f"{m.get('order', '')}. {m.get('title', m['id'])}" for m in modules})
     selected_id = st.selectbox(
-        "Module",
+        "Module view",
         options=list(module_options.keys()),
         format_func=lambda key: module_options[key],
     )
-    lessons = get_lessons_for_module(selected_id)
-    st.caption(f"{len(lessons)} lesson(s) in **{get_module_title(selected_id)}**.")
-    for lesson in lessons:
-        _render_lesson_card(lesson, expanded=False)
+    if selected_id == "all":
+        total_lessons = sum(len(get_lessons_for_module(str(module["id"]))) for module in modules)
+        st.caption(f"{total_lessons} lessons shown in roadmap order.")
+        for module in modules:
+            module_id = str(module["id"])
+            module_lessons = get_lessons_for_module(module_id)
+            if not module_lessons:
+                continue
+            st.markdown(f"#### {module.get('order', '')}. {module.get('title', module_id)}")
+            st.caption(module.get("summary", ""))
+            for lesson in module_lessons:
+                _render_lesson_card(lesson, expanded=False)
+            st.divider()
+    else:
+        lessons = get_lessons_for_module(selected_id)
+        st.caption(f"{len(lessons)} lesson(s) in **{get_module_title(selected_id)}**.")
+        for lesson in lessons:
+            _render_lesson_card(lesson, expanded=False)
 
 
 def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
     """Render one lesson as an expander."""
     title = lesson.get("title", "Lesson")
     with st.expander(title, expanded=expanded):
+        lesson_id = str(lesson.get("id", ""))
+        intro_heading = "Why long-term stock-market investing can work"
+        if lesson_id == "market-mindset":
+            for section in lesson.get("sections", []):
+                if section.get("heading") == intro_heading:
+                    st.markdown(f"**{intro_heading}**")
+                    st.markdown(_escape_markdown_math(section.get("body", "")))
+                    render_visual_keys(
+                        ["long_term_market_gdp"],
+                        heading=None,
+                        key_prefix=lesson_id,
+                    )
+                    break
+
         objectives = lesson.get("objectives", [])
         if objectives:
             st.markdown("**Objectives**")
             objective_notes = lesson.get("objective_notes", {})
             for item in objectives:
-                st.markdown(f"- {item}")
+                st.markdown(f"- {_escape_markdown_math(item)}")
                 note = objective_notes.get(str(item))
                 if note:
                     note_html = html.escape(str(note)).replace("$", "&#36;")
@@ -257,27 +297,48 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
 """,
                         unsafe_allow_html=True,
                     )
-        lesson_id = str(lesson.get("id", ""))
         if lesson_id == "candlestick-patterns":
-            render_visual_keys(["candle_anatomy"])
+            render_visual_keys(["candle_anatomy"], key_prefix=lesson_id)
         for section in lesson.get("sections", []):
             heading = section.get("heading")
             body = section.get("body", "")
+            if lesson_id == "market-mindset" and heading == intro_heading:
+                continue
             if heading:
                 st.markdown(f"**{heading}**")
             if body:
-                st.write(body)
+                st.markdown(_escape_markdown_math(body))
+            if lesson_id == "market-mindset" and heading == "What moves the market":
+                render_visual_keys(
+                    ["market_drivers"],
+                    heading=None,
+                    key_prefix=lesson_id,
+                )
+            if lesson_id == "market-internals":
+                market_internal_visuals = {
+                    "What market internals measure": ["market_internals"],
+                    "VIX: fear and expected volatility": ["vix_explainer"],
+                    "TICK: intraday buying and selling pressure": ["tick_explainer"],
+                    "TRIN: breadth adjusted by volume": ["trin_explainer"],
+                }
+                visual_keys = market_internal_visuals.get(str(heading), [])
+                if visual_keys:
+                    render_visual_keys(visual_keys, heading=None, key_prefix=lesson_id)
         key_points = lesson.get("key_points", [])
         if key_points:
             st.markdown("**Key points**")
             for point in key_points:
-                st.markdown(f"- {point}")
+                st.markdown(f"- {_escape_markdown_math(point)}")
         practice = lesson.get("practice")
         if practice:
             st.markdown("**Practice**")
-            st.write(practice)
+            st.markdown(_escape_markdown_math(practice))
         if lesson_id == "candlestick-patterns":
-            render_visual_keys(["candlestick_context"])
+            render_visual_keys(["candlestick_context"], key_prefix=lesson_id)
+        elif lesson_id == "market-mindset":
+            pass
+        elif lesson_id == "market-internals":
+            pass
         else:
             render_lesson_visuals(lesson_id)
         simulator = lesson.get("related_simulator")
@@ -288,78 +349,252 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
 def _strategy_playbook_page() -> None:
     """Render strategy playbook with simulator template hints."""
     st.markdown("### Strategy playbook")
-    st.caption(
-        "When each structure tends to fit, which payoff-lab template to use, "
-        "and an illustrative expiration payoff chart per strategy."
+    st.caption("Step 2 of 4: choose a structure after diagnosing the market regime.")
+    st.info(
+        "Use this after **Market regime guide**. The guide answers 'what market am I in?'; "
+        "this playbook answers 'given that market, which structure should I consider and what should I avoid?' "
+        "Then validate with **Pre-trade checklist** and **Rules playbook**."
+    )
+    st.markdown(
+        """
+**Decision flow examples**
+
+- If the market is risk-on, VIX is falling, and a stock is breaking out, compare **long call** versus **bull call spread**.
+- If the stock is range-bound and IV is high, compare **covered call**, **cash-secured put**, or **iron condor** depending on whether you own shares or want assignment.
+- If the market is risk-off and support is breaking, compare **long put**, **bear put spread**, or **protective put** if you already own the shares.
+"""
     )
     strategies = get_strategy_playbook()
     if not strategies:
         st.warning("No strategies defined in curriculum.")
         return
 
-    bias_filter = st.selectbox(
-        "Filter by market bias",
-        ["All", "Bullish", "Bearish", "Neutral", "Neutral direction, high movement expected", "Cautious long", "Bullish but defensive"],
+    bias_groups = _strategy_market_bias_groups()
+    setup_filter = st.selectbox(
+        "Market setup",
+        ["All market setups", *[group["label"] for group in bias_groups]],
     )
+    strategies_by_bias: dict[str, list[dict]] = {}
     for entry in strategies:
-        if bias_filter != "All" and entry.get("market_bias") != bias_filter:
+        strategies_by_bias.setdefault(str(entry.get("market_bias", "Other")), []).append(entry)
+
+    for group in bias_groups:
+        if setup_filter != "All market setups" and setup_filter != group["label"]:
             continue
-        with st.expander(entry.get("name", "Strategy"), expanded=False):
+        group_entries = [
+            entry
+            for bias in group["biases"]
+            for entry in strategies_by_bias.get(bias, [])
+        ]
+        if not group_entries:
+            continue
+        st.markdown(f"#### {group['label']}")
+        st.caption(group["summary"])
+        st.markdown(f"**Typical evidence:** {group['evidence']}")
+        st.markdown(f"**First question:** {group['question']}")
+        for entry in group_entries:
+            _render_strategy_playbook_entry(entry)
+
+
+def _strategy_market_bias_groups() -> list[dict]:
+    """Return user-facing market-bias groups for the strategy playbook."""
+    return [
+        {
+            "label": "Bullish / risk-on",
+            "biases": ["Bullish / risk-on"],
+            "summary": "Use when price trend, breadth, leadership, and volatility support upside participation.",
+            "evidence": "Indexes above key moving averages, VIX stable/falling, sector leadership strong, dips bought.",
+            "question": "Do I want uncapped upside, or is a defined target enough?",
+        },
+        {
+            "label": "Mildly bullish / income",
+            "biases": ["Mildly bullish / income"],
+            "summary": "Use when you are constructive but expect slower movement, range behavior, or want income while waiting.",
+            "evidence": "Stock above support, IV medium/high, upside target moderate, willingness to own or sell shares at planned prices.",
+            "question": "Am I truly willing to accept assignment or cap upside at the selected strike?",
+        },
+        {
+            "label": "Bearish / risk-off",
+            "biases": ["Bearish / risk-off"],
+            "summary": "Use when trend and internals favor downside or when you need defined-risk bearish exposure.",
+            "evidence": "Support breaking, VIX rising, breadth weakening, rallies sold, defensive leadership.",
+            "question": "Is IV still reasonable for buying downside, or should I use a spread to reduce cost?",
+        },
+        {
+            "label": "Neutral / range-bound",
+            "biases": ["Neutral / range-bound"],
+            "summary": "Use when price is expected to stay inside a range and IV is rich enough to justify premium selling.",
+            "evidence": "Clear support/resistance, failed breakouts, elevated IV, no strong directional catalyst.",
+            "question": "Is the credit worth the max loss if price breaks the range?",
+        },
+        {
+            "label": "High-movement event",
+            "biases": ["High-movement event"],
+            "summary": "Use when direction is unclear but a large move may occur.",
+            "evidence": "Known catalyst, compression before event, IV not already overpricing the expected move.",
+            "question": "Can the expected move beat the total premium and possible IV crush?",
+        },
+        {
+            "label": "Defensive / hedge",
+            "biases": ["Defensive / hedge"],
+            "summary": "Use when you want to keep stock exposure but define downside risk.",
+            "evidence": "Existing stock gains, uncertain event ahead, rising volatility, risk-off transition, tax or portfolio reasons to hold shares.",
+            "question": "Do I want to pay for full upside protection, or finance protection by capping upside?",
+        },
+    ]
+
+
+def _render_strategy_playbook_entry(entry: dict) -> None:
+    """Render one playbook entry with detailed market-context guidance."""
+    with st.expander(entry.get("name", "Strategy"), expanded=False):
+        col1, col2, col3 = st.columns(3)
+        with col1:
             st.markdown(f"**Market bias:** {entry.get('market_bias', '—')}")
+        with col2:
             st.markdown(f"**IV context:** {entry.get('iv_bias', '—')}")
+        with col3:
             st.markdown(f"**Structure:** {entry.get('structure', '—')}")
-            st.write(entry.get("when_to_use", ""))
-            st.warning(entry.get("risks", "Define risk before entry."))
-            strategy_id = str(entry.get("id", ""))
-            render_strategy_playbook_visuals(strategy_id)
-            template = entry.get("template")
-            if template:
-                st.caption(f"Try template **{template}** in Strategy payoff lab.")
+
+        st.markdown("**Market setup**")
+        st.markdown(_escape_markdown_math(entry.get("market_setup", "")))
+        st.markdown("**When to use**")
+        st.markdown(_escape_markdown_math(entry.get("when_to_use", "")))
+        example = entry.get("example")
+        if example:
+            st.markdown("**Example**")
+            st.markdown(_escape_markdown_math(example))
+        avoid_when = entry.get("avoid_when")
+        if avoid_when:
+            st.markdown("**When to avoid**")
+            st.markdown(_escape_markdown_math(avoid_when))
+        management = entry.get("management")
+        if management:
+            st.markdown("**Management**")
+            st.markdown(_escape_markdown_math(management))
+        st.warning(_escape_markdown_math(entry.get("risks", "Define risk before entry.")))
+        strategy_id = str(entry.get("id", ""))
+        render_strategy_playbook_visuals(strategy_id)
+        template = entry.get("template")
+        if template:
+            st.caption(f"Try template **{template}** in Strategy payoff lab.")
 
 
 def _market_regime_guide() -> None:
     """Render regime framework lessons and link to scenario lab."""
     st.markdown("### Market regime guide")
-    st.caption("Start with the environment, then pick stock and option structures.")
+    st.caption("Step 1 of 4: diagnose the environment before choosing a structure.")
+    st.info(
+        "This page answers: **what market am I in?** "
+        "After this, use **Strategy playbook** to pick a structure, "
+        "**Pre-trade checklist** to validate the trade, and "
+        "**Rules playbook** to confirm you are not breaking permanent discipline rules."
+    )
+    st.markdown(
+        """
+**Full decision flow**
+
+1. **Market regime guide** — classify risk-on, neutral, risk-off, high volatility, or event-driven.
+2. **Strategy playbook** — choose structures that fit that regime and IV context.
+3. **Pre-trade checklist** — confirm thesis, max loss, invalidation, liquidity, and expiration.
+4. **Rules playbook** — enforce sizing, liquidity, earnings, margin, and behavior rules.
+
+**Examples**
+
+- **Risk-on:** indexes trend higher, VIX falls from 20 to 16, breadth is positive, and a stock breaks above resistance. Next step: compare stock, long call, or bull call spread in Strategy playbook.
+- **Neutral:** stock respects $92 support and $108 resistance, IV is elevated, and there is no strong catalyst. Next step: compare covered call, cash-secured put, credit spread, or iron condor.
+- **Risk-off:** VIX rises, support breaks, and rallies fail. Next step: reduce size, use protective puts or collars on existing shares, or defined-risk bearish structures.
+- **Event-driven:** earnings in one week and IV is rising. Next step: compare implied move vs your thesis before buying or selling premium.
+"""
+    )
     for lesson in get_lessons_for_module("regime-framework"):
         _render_lesson_card(lesson, expanded=True)
     st.divider()
     st.markdown("**Quick regime map**")
     st.markdown(
         """
-| Environment | Often works | Often avoid |
-|-------------|-------------|-------------|
-| Risk-on (VIX falling, growth leads) | Stock, call spreads, long calls | Aggressive call selling that caps upside too early |
-| Neutral + elevated IV | Covered calls, credit spreads, iron condors, diagonals | Buying expensive ATM options without a catalyst |
-| Risk-off (VIX rising, bad news punished) | Cash, puts, collars, smaller size | Oversized directional bets |
+| Environment | What you usually see | Often works | Often avoid | Next page |
+|-------------|----------------------|-------------|-------------|-----------|
+| Risk-on | VIX falling, breakouts hold, growth leads | Stock, long calls, bull call spreads | Tight covered calls that cap strong trends | Strategy playbook → Bullish / risk-on |
+| Neutral + elevated IV | Range, failed breakouts, rich premium | Covered calls, CSPs, credit spreads, iron condors | Buying expensive ATM options without catalyst | Strategy playbook → Mildly bullish / income or Neutral |
+| Risk-off | VIX rising, breadth weak, support breaks | Cash, puts, collars, smaller size | Oversized directional bets | Strategy playbook → Bearish / Defensive |
+| High volatility / event | IV spikes, earnings, macro releases | Hedging, defined-risk spreads, careful premium selling | Undefined-risk short options, illiquid strikes | Rules playbook + Pre-trade checklist |
 """
     )
-    st.caption("Use **Market scenario lab** and **Rules playbook** for regime-specific reminders.")
+    st.caption(
+        "Next: open **Strategy playbook** for structure selection, then **Pre-trade checklist** before sending any order."
+    )
 
 
 def _pre_trade_checklist() -> None:
     """Render interactive pre-trade checklists."""
     st.markdown("### Pre-trade checklist")
-    st.caption("Use before opening a new stock or options position.")
+    st.caption("Step 3 of 4: validate the trade before sending the order.")
+    st.info(
+        "Use this after **Market regime guide** and **Strategy playbook**. "
+        "If any answer is vague, revise the trade or skip it. "
+        "Then confirm the trade does not violate **Rules playbook**."
+    )
     render_visual_keys(
         ["regime_decision_flow"],
         heading="**Decision flow (before you check boxes)**",
         show_dividers=False,
+        key_prefix="pre_trade_checklist",
     )
     checklists = get_checklists()
     if not checklists:
         st.warning("No checklists defined.")
         return
     for checklist in checklists:
-        st.markdown(f"**{checklist.get('title', 'Checklist')}**")
-        for index, item in enumerate(checklist.get("items", [])):
-            st.checkbox(item, key=f"edu_check_{checklist.get('id')}_{index}")
-        st.divider()
+        with st.expander(checklist.get("title", "Checklist"), expanded=checklist.get("id") == "pre-trade-options"):
+            summary = checklist.get("summary")
+            if summary:
+                st.markdown(_escape_markdown_math(summary))
+            when_to_use = checklist.get("when_to_use")
+            if when_to_use:
+                st.markdown("**When to use**")
+                st.markdown(_escape_markdown_math(when_to_use))
+            st.divider()
+            for index, item in enumerate(checklist.get("items", [])):
+                _render_checklist_item(checklist.get("id", "checklist"), index, item)
+
+
+def _render_checklist_item(checklist_id: str, index: int, item: object) -> None:
+    """Render one checklist item with optional explanation and example."""
+    if isinstance(item, dict):
+        question = str(item.get("question", "Checklist item"))
+        st.checkbox(question, key=f"edu_check_{checklist_id}_{index}")
+        why_it_matters = item.get("why_it_matters")
+        if why_it_matters:
+            st.markdown(f"- **Why it matters:** {_escape_markdown_math(why_it_matters)}")
+        example = item.get("example")
+        if example:
+            st.markdown(f"- **Example:** {_escape_markdown_math(example)}")
+        red_flag = item.get("red_flag")
+        if red_flag:
+            st.markdown(f"- **Red flag:** {_escape_markdown_math(red_flag)}")
+    else:
+        st.checkbox(str(item), key=f"edu_check_{checklist_id}_{index}")
+    st.markdown("")
 
 
 def _rules_playbook() -> None:
     """Render local-file educational rules."""
     st.markdown("### Rules playbook")
+    st.caption("Step 4 of 4: permanent discipline rules that apply across regimes and structures.")
+    st.info(
+        "Rules playbook does not choose the trade. It protects you from repeating expensive mistakes: "
+        "oversizing, illiquid contracts, revenge trading, undefined risk, poor earnings handling, and weak margin discipline."
+    )
+    st.markdown(
+        """
+**How this complements the other pages**
+
+- **Market regime guide** tells you the environment.
+- **Strategy playbook** suggests structures for that environment.
+- **Pre-trade checklist** validates one specific trade.
+- **Rules playbook** enforces behavior that should never be broken, regardless of how good the setup looks.
+"""
+    )
     rules = load_education_rules()
     if not rules:
         st.warning("No education rules were found in `data/education_rules.json`.")
@@ -376,12 +611,27 @@ def _rules_playbook() -> None:
     matching_rules = filter_rules(regime, instrument)
     st.caption(f"Showing {len(matching_rules)} rule(s) from `data/education_rules.json`.")
     for rule in matching_rules:
-        with st.expander(rule.get("title", "Untitled rule"), expanded=True):
-            st.markdown(f"**Regime:** {rule.get('market_regime', 'Unknown')}")
-            st.markdown(f"**Instrument:** {rule.get('instrument', 'Unknown')}")
-            st.write(rule.get("lesson", ""))
-            st.caption(f"Example: {rule.get('example', '')}")
-            st.warning(rule.get("risk_note", "Risk management is required."))
+        with st.expander(rule.get("title", "Untitled rule"), expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Regime:** {rule.get('market_regime', 'Unknown')}")
+            with col2:
+                st.markdown(f"**Instrument:** {rule.get('instrument', 'Unknown')}")
+            st.markdown("**Rule**")
+            st.markdown(_escape_markdown_math(rule.get("lesson", "")))
+            example = rule.get("example")
+            if example:
+                st.markdown("**Example**")
+                st.markdown(_escape_markdown_math(example))
+            action = rule.get("action")
+            if action:
+                st.markdown("**What to do**")
+                st.markdown(_escape_markdown_math(action))
+            avoid = rule.get("avoid")
+            if avoid:
+                st.markdown("**What to avoid**")
+                st.markdown(_escape_markdown_math(avoid))
+            st.warning(_escape_markdown_math(rule.get("risk_note", "Risk management is required.")))
 
 
 def _stock_pnl_simulator() -> None:
@@ -421,6 +671,14 @@ def _stock_pnl_simulator() -> None:
     pnl = [(price - entry_price) * shares * sign - round_trip_commission for price in prices]
     return_basis = entry_price * int(shares) + round_trip_commission
     frame = _payoff_frame(prices, pnl, entry_price, return_basis)
+    frame["Scenario value"] = [price * int(shares) for price in prices]
+    frame["Entry cost"] = entry_price * int(shares)
+    frame["Entry cash flow"] = -entry_price * int(shares) * sign
+    frame["Scenario cash flow"] = [price * int(shares) * sign for price in prices]
+    frame["Commissions"] = round_trip_commission
+    frame["Gross P&L before commissions"] = [(price - entry_price) * int(shares) * sign for price in prices]
+    frame["Breakdown Type"] = "stock"
+    frame["Position Action"] = direction
     _render_interactive_payoff_chart(
         _line_chart(frame, "Underlying Price", "P&L", f"{direction} payoff"),
         frame,
@@ -563,9 +821,20 @@ def _options_pnl_simulator() -> None:
     prices = _price_range(stock_price)
     remaining_days = max(int(days_to_expiration) - int(scenario_days_elapsed), 0)
     scenario_iv = max((implied_volatility + volatility_change) / 100, 0.0001)
+    entry_iv = max(implied_volatility / 100, 0.0001)
     direction_sign = 1 if action == "Buy" else -1
     round_trip_commission = _option_round_trip_commission(int(contracts), option_order_commission, option_contract_fee)
-    values = [
+    entry_model_value = _option_model_value(
+        option_type,
+        stock_price,
+        strike,
+        int(days_to_expiration),
+        entry_iv,
+        risk_free_rate / 100,
+        dividend_yield / 100,
+        valuation_model,
+    )
+    raw_scenario_values = [
         _option_model_value(
             option_type,
             price,
@@ -578,9 +847,17 @@ def _options_pnl_simulator() -> None:
         )
         for price in prices
     ]
+    values = [max(premium + (value - entry_model_value), 0.0) for value in raw_scenario_values]
     pnl = [(value - premium) * 100 * contracts * direction_sign - round_trip_commission for value in values]
     return_basis = premium * 100 * int(contracts) + round_trip_commission
     frame = _payoff_frame(prices, pnl, stock_price, return_basis)
+    multiplier = 100 * int(contracts)
+    frame["Scenario value"] = [value * multiplier for value in values]
+    frame["Entry cost"] = premium * multiplier
+    frame["Commissions"] = round_trip_commission
+    frame["Gross P&L before commissions"] = [(value - premium) * multiplier * direction_sign for value in values]
+    frame["Breakdown Type"] = "option"
+    frame["Position Action"] = action
     _render_interactive_payoff_chart(
         _line_chart(frame, "Underlying Price", "P&L", f"{action} {option_type} scenario payoff"),
         frame,
@@ -605,6 +882,14 @@ def _options_pnl_simulator() -> None:
         f"Modeled max loss for bought options: **{_format_money_or_text(max_loss)}**. "
         f"Round-trip commission included: **\\${round_trip_commission:,.2f}**."
     )
+    entry_model_gap = entry_model_value - premium
+    if abs(entry_model_gap) > max(0.25, premium * 0.25):
+        st.warning(
+            "The entry premium is far from the model value implied by the current inputs. "
+            f"Entry premium: **\\${premium:.2f}** vs. model value: **\\${entry_model_value:.2f}**. "
+            "Scenario P&L is therefore calibrated to the entry premium and uses the model only for changes "
+            "from that entry point."
+        )
     _render_option_variable_explanations()
 
 
@@ -1554,13 +1839,24 @@ def _strategy_payoff_frame(
     model_inputs = model_inputs or {}
     rows = []
     for price in prices:
-        total_pnl = sum(_leg_pnl(price, leg, stock_entry_price, model_inputs) for leg in legs)
+        leg_breakdowns = [_leg_pnl_breakdown(price, leg, stock_entry_price, model_inputs) for leg in legs]
+        total_pnl = sum(float(item["net_pnl"]) for item in leg_breakdowns)
+        entry_cash_flow = sum(float(item["entry_cash_flow"]) for item in leg_breakdowns)
+        scenario_cash_flow = sum(float(item["scenario_cash_flow"]) for item in leg_breakdowns)
+        gross_pnl = sum(float(item["gross_pnl_before_commissions"]) for item in leg_breakdowns)
+        commissions = sum(float(item["commissions"]) for item in leg_breakdowns)
         rows.append(
             {
                 "Underlying Price": price,
                 "Underlying Change %": round(((price / stock_entry_price) - 1) * 100, 2),
                 "P&L": round(total_pnl, 2),
                 "P&L %": _pnl_percent(total_pnl, float(model_inputs.get("return_basis", 0.0))),
+                "Entry cash flow": entry_cash_flow,
+                "Scenario cash flow": scenario_cash_flow,
+                "Gross P&L before commissions": gross_pnl,
+                "Commissions": commissions,
+                "Leg breakdown": leg_breakdowns,
+                "Breakdown Type": "strategy",
             }
         )
     return pd.DataFrame(rows)
@@ -1568,6 +1864,11 @@ def _strategy_payoff_frame(
 
 def _leg_pnl(price: float, leg: dict, stock_entry_price: float, model_inputs: dict | None = None) -> float:
     """Calculate expiration P&L for one stock or option leg."""
+    return float(_leg_pnl_breakdown(price, leg, stock_entry_price, model_inputs)["net_pnl"])
+
+
+def _leg_pnl_breakdown(price: float, leg: dict, stock_entry_price: float, model_inputs: dict | None = None) -> dict:
+    """Calculate P&L components for one stock or option leg."""
     model_inputs = model_inputs or {}
     sign = 1 if leg["Action"] == "Buy" else -1
     quantity = int(leg["Quantity"])
@@ -1577,22 +1878,47 @@ def _leg_pnl(price: float, leg: dict, stock_entry_price: float, model_inputs: di
             float(model_inputs.get("stock_order_commission", 0.0)),
             float(model_inputs.get("stock_per_share_fee", 0.0)),
         )
-        return (price - stock_entry_price) * quantity * sign - commission
+        entry_cash_flow = -stock_entry_price * quantity * sign
+        scenario_cash_flow = price * quantity * sign
+        gross_pnl = entry_cash_flow + scenario_cash_flow
+        return {
+            "leg": f"{leg['Action']} {quantity} shares",
+            "entry_cash_flow": entry_cash_flow,
+            "scenario_cash_flow": scenario_cash_flow,
+            "gross_pnl_before_commissions": gross_pnl,
+            "commissions": commission,
+            "net_pnl": gross_pnl - commission,
+        }
 
     strike = float(leg["Strike"])
     premium = float(leg["Premium"])
     if model_inputs.get("simulation_mode") == "Before expiration / Greeks":
-        volatility = max((float(leg.get("IV %", 35.0)) + float(model_inputs.get("volatility_change", 0.0))) / 100, 0.0001)
-        value = _option_model_value(
+        entry_volatility = max(float(leg.get("IV %", 35.0)) / 100, 0.0001)
+        scenario_volatility = max(
+            (float(leg.get("IV %", 35.0)) + float(model_inputs.get("volatility_change", 0.0))) / 100,
+            0.0001,
+        )
+        entry_model_value = _option_model_value(
             leg["Instrument"],
-            price,
+            stock_entry_price,
             strike,
-            int(model_inputs.get("remaining_days", 0)),
-            volatility,
+            int(model_inputs.get("days_to_expiration", 0)),
+            entry_volatility,
             float(model_inputs.get("risk_free_rate", 0.0)),
             float(model_inputs.get("dividend_yield", 0.0)),
             str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
         )
+        scenario_model_value = _option_model_value(
+            leg["Instrument"],
+            price,
+            strike,
+            int(model_inputs.get("remaining_days", 0)),
+            scenario_volatility,
+            float(model_inputs.get("risk_free_rate", 0.0)),
+            float(model_inputs.get("dividend_yield", 0.0)),
+            str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
+        )
+        value = max(premium + (scenario_model_value - entry_model_value), 0.0)
     else:
         value = max(price - strike, 0) if leg["Instrument"] == "Call" else max(strike - price, 0)
     commission = _option_round_trip_commission(
@@ -1600,7 +1926,18 @@ def _leg_pnl(price: float, leg: dict, stock_entry_price: float, model_inputs: di
         float(model_inputs.get("option_order_commission", 0.0)),
         float(model_inputs.get("option_contract_fee", 0.0)),
     )
-    return (value - premium) * 100 * quantity * sign - commission
+    multiplier = 100 * quantity
+    entry_cash_flow = -premium * multiplier * sign
+    scenario_cash_flow = value * multiplier * sign
+    gross_pnl = entry_cash_flow + scenario_cash_flow
+    return {
+        "leg": f"{leg['Action']} {quantity} {leg['Instrument']} {strike:g}",
+        "entry_cash_flow": entry_cash_flow,
+        "scenario_cash_flow": scenario_cash_flow,
+        "gross_pnl_before_commissions": gross_pnl,
+        "commissions": commission,
+        "net_pnl": gross_pnl - commission,
+    }
 
 
 def _strategy_payoff_chart(frame: pd.DataFrame, title: str) -> go.Figure:
@@ -1920,6 +2257,131 @@ def _render_selected_pnl_result(row: pd.Series | None) -> None:
         )
     with col2:
         st.metric("Selected scenario gain/loss", f"{float(row.get('P&L %', 0.0)):+.2f}%")
+    _render_selected_pnl_breakdown(row)
+
+
+def _render_selected_pnl_breakdown(row: pd.Series) -> None:
+    """Render detailed P&L components when the selected scenario includes them."""
+    breakdown_type = _selected_pnl_breakdown_type(row)
+    if not breakdown_type:
+        return
+
+    st.markdown("#### Selected scenario P&L breakdown")
+    if breakdown_type == "stock":
+        _render_stock_pnl_breakdown(row)
+    elif breakdown_type == "option":
+        _render_option_pnl_breakdown(row)
+    elif breakdown_type == "strategy":
+        _render_strategy_pnl_breakdown(row)
+
+
+def _selected_pnl_breakdown_type(row: pd.Series) -> str:
+    """Infer the selected scenario breakdown type from explicit type or available columns."""
+    explicit_type = str(row.get("Breakdown Type", "") or "").lower()
+    if explicit_type in {"stock", "option", "strategy"}:
+        return explicit_type
+    if "Leg breakdown" in row and isinstance(row.get("Leg breakdown"), list):
+        return "strategy"
+    if "Scenario value" in row and "Entry cost" in row:
+        return "option" if str(row.get("Position Action", "")) in {"Buy", "Sell"} else "stock"
+    if "Entry cash flow" in row and "Scenario cash flow" in row:
+        return "stock"
+    return ""
+
+
+def _render_stock_pnl_breakdown(row: pd.Series) -> None:
+    """Render stock simulator P&L components."""
+    if str(row.get("Position Action", "")) == "Short stock":
+        components = [
+            ("Short-sale proceeds at entry", float(row.get("Entry cash flow", 0.0))),
+            ("Scenario buyback cost", float(row.get("Scenario cash flow", 0.0))),
+            ("Gross P&L before commissions", float(row.get("Gross P&L before commissions", 0.0))),
+            ("Broker commissions and fees", -float(row.get("Commissions", 0.0))),
+            ("Net P&L", float(row.get("P&L", 0.0))),
+        ]
+    else:
+        components = [
+            ("Purchase cost at entry", float(row.get("Entry cash flow", 0.0))),
+            ("Scenario sale value", float(row.get("Scenario cash flow", 0.0))),
+            ("Gross P&L before commissions", float(row.get("Gross P&L before commissions", 0.0))),
+            ("Broker commissions and fees", -float(row.get("Commissions", 0.0))),
+            ("Net P&L", float(row.get("P&L", 0.0))),
+        ]
+    _render_pnl_component_table(components)
+
+
+def _render_option_pnl_breakdown(row: pd.Series) -> None:
+    """Render single-option simulator P&L components."""
+    action = str(row.get("Position Action", "Buy"))
+    if action == "Sell":
+        components = [
+            ("Premium received at entry", float(row.get("Entry cost", 0.0))),
+            ("Scenario buyback value", -float(row.get("Scenario value", 0.0))),
+            ("Gross P&L before commissions", float(row.get("Gross P&L before commissions", 0.0))),
+            ("Broker commissions and fees", -float(row.get("Commissions", 0.0))),
+            ("Net P&L", float(row.get("P&L", 0.0))),
+        ]
+    else:
+        components = [
+            ("Scenario option value", float(row.get("Scenario value", 0.0))),
+            ("Premium paid at entry", -float(row.get("Entry cost", 0.0))),
+            ("Gross P&L before commissions", float(row.get("Gross P&L before commissions", 0.0))),
+            ("Broker commissions and fees", -float(row.get("Commissions", 0.0))),
+            ("Net P&L", float(row.get("P&L", 0.0))),
+        ]
+    _render_pnl_component_table(components)
+
+
+def _render_strategy_pnl_breakdown(row: pd.Series) -> None:
+    """Render aggregate and per-leg strategy P&L components."""
+    components = [
+        ("Net entry cash flow", float(row.get("Entry cash flow", 0.0))),
+        ("Net scenario cash flow", float(row.get("Scenario cash flow", 0.0))),
+        ("Gross P&L before commissions", float(row.get("Gross P&L before commissions", 0.0))),
+        ("Broker commissions and fees", -float(row.get("Commissions", 0.0))),
+        ("Net P&L", float(row.get("P&L", 0.0))),
+    ]
+    _render_pnl_component_table(components)
+
+    leg_breakdown = row.get("Leg breakdown", [])
+    if isinstance(leg_breakdown, list) and leg_breakdown:
+        leg_rows = [
+            {
+                "Leg": item.get("leg", ""),
+                "Entry cash flow": _format_signed_money(float(item.get("entry_cash_flow", 0.0))),
+                "Scenario cash flow": _format_signed_money(float(item.get("scenario_cash_flow", 0.0))),
+                "Gross P&L": _format_signed_money(float(item.get("gross_pnl_before_commissions", 0.0))),
+                "Commissions": _format_signed_money(-float(item.get("commissions", 0.0))),
+                "Net P&L": _format_signed_money(float(item.get("net_pnl", 0.0))),
+            }
+            for item in leg_breakdown
+        ]
+        st.dataframe(pd.DataFrame(leg_rows), use_container_width=True, hide_index=True)
+
+
+def _render_pnl_component_table(components: list[tuple[str, float]]) -> None:
+    """Render a compact P&L component table."""
+    cols = st.columns(min(len(components), 5))
+    for col, (label, value) in zip(cols, components):
+        with col:
+            st.metric(label, _format_signed_money(value))
+    st.markdown(_pnl_formula_text(components))
+
+
+def _pnl_formula_text(components: list[tuple[str, float]]) -> str:
+    """Return a compact formula-style P&L explanation."""
+    if not components:
+        return ""
+    lines = ["**Calculation:**"]
+    for label, value in components:
+        lines.append(f"- {label}: `{_format_signed_money(value)}`")
+    return "\n".join(lines)
+
+
+def _format_signed_money(value: float) -> str:
+    """Format positive and negative money values with explicit signs."""
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}${abs(value):,.2f}"
 
 
 def _apply_price_percent_ticks(fig: go.Figure, frame: pd.DataFrame, x_col: str) -> None:
