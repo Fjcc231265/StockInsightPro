@@ -170,20 +170,20 @@ This assessment is based on the latest Alpha Vantage annual and quarterly income
 
 #### 1. Growth profile
 
-- Latest annual revenue: **{_money(latest_revenue)}**, versus **{_money(prior_revenue)}** in the prior year (**{_percent(revenue_growth)}**).
-- Latest annual net income: **{_money(latest_net_income)}**, versus **{_money(prior_net_income)}** in the prior year (**{_percent(net_income_growth)}**).
-- Latest quarterly revenue trend: **{_percent(quarterly_revenue_growth)}** versus the immediately prior quarter.
-- Latest quarterly net income trend: **{_percent(quarterly_net_income_growth)}** versus the immediately prior quarter.
+- Latest annual revenue: **{_money(latest_revenue)}**, versus **{_money(prior_revenue)}** in the prior year (**{_format_growth_percent(revenue_growth)}**).
+- Latest annual net income: **{_money(latest_net_income)}**, versus **{_money(prior_net_income)}** in the prior year (**{_format_growth_percent(net_income_growth)}**).
+- Latest quarterly revenue trend: **{_format_growth_percent(quarterly_revenue_growth)}** versus the immediately prior quarter.
+- Latest quarterly net income trend: **{_format_growth_percent(quarterly_net_income_growth)}** versus the immediately prior quarter.
 
 The revenue trend is **{_trend_word(revenue_growth)}** on an annual basis and **{_trend_word(quarterly_revenue_growth)}** on the latest quarterly comparison. This helps separate durable annual growth from short-term seasonality.
 
 #### 2. Profitability and margins
 
-- Gross margin: **{_percent(gross_margin)}**
-- Operating margin: **{_percent(operating_margin)}**
-- EBITDA margin: **{_percent(ebitda_margin)}**
-- Net margin: **{_percent(net_margin)}**
-- Free cash flow margin: **{_percent(fcf_margin)}**
+- Gross margin: **{_format_ratio_percent(gross_margin)}**
+- Operating margin: **{_format_ratio_percent(operating_margin)}**
+- EBITDA margin: **{_format_ratio_percent(ebitda_margin)}**
+- Net margin: **{_format_ratio_percent(net_margin)}**
+- Free cash flow margin: **{_format_ratio_percent(fcf_margin)}**
 
 The margin profile looks **{_margin_quality(net_margin, operating_margin)}**. A company with positive operating and net margins has more flexibility to fund growth internally; weak or negative margins make cash reserves and access to capital much more important.
 
@@ -194,7 +194,7 @@ The margin profile looks **{_margin_quality(net_margin, operating_margin)}**. A 
 - Current ratio: **{_number(current_ratio)}**
 - Cash-to-debt ratio: **{_number(cash_to_debt)}**
 - Debt-to-equity ratio: **{_number(debt_to_equity)}**
-- Liabilities / assets: **{_percent(liability_to_assets)}**
+- Liabilities / assets: **{_format_ratio_percent(liability_to_assets)}**
 
 {cash_assessment}
 
@@ -381,13 +381,18 @@ def _money(value: float | None) -> str:
     return "-" if value is None else f"USD {value:,.2f}M"
 
 
-def _percent(value: float | None) -> str:
-    """Format ratios or percent values."""
+def _format_growth_percent(value: float | None) -> str:
+    """Format a period-over-period change already expressed in percent units."""
     if value is None:
         return "-"
-    if abs(value) <= 3:
-        value *= 100
     return f"{value:+.2f}%" if value < 0 else f"{value:.2f}%"
+
+
+def _format_ratio_percent(value: float | None) -> str:
+    """Format a decimal ratio as a percentage."""
+    if value is None:
+        return "-"
+    return _format_growth_percent(value * 100)
 
 
 def _number(value: float | None) -> str:
