@@ -26,6 +26,7 @@ MAIN_SECTIONS = [
     "News & Sentiment",
     "Options Intelligence",
     "Portfolio Watchlist",
+    "Scan Trades",
     "Reports",
     "Settings",
     "Education",
@@ -80,8 +81,13 @@ SUBMENUS = {
     "Portfolio Watchlist": [
         "Add ticker",
         "Track favorites",
-        "Alerts placeholder",
         "Compare stocks",
+    ],
+    "Scan Trades": [
+        "Bottom Phising",
+        "Breakout scan",
+        "Pullback scan",
+        "Volume surge scan",
     ],
     "Reports": [
         "AI summary report",

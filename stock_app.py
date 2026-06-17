@@ -29,6 +29,7 @@ from ui.pages import (
     options_intelligence,
     portfolio,
     reports,
+    scan_trades,
     settings,
     technical,
 )
@@ -68,6 +69,7 @@ PAGE_REGISTRY = {
     "News & Sentiment": (news.render, True),
     "Options Intelligence": (options_intelligence.render, True),
     "Portfolio Watchlist": (portfolio.render, True),
+    "Scan Trades": (scan_trades.render, True),
     "Reports": (reports.render, True),
     "Settings": (settings.render, True),
     "Education": (education.render, True),
