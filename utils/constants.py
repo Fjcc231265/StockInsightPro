@@ -102,10 +102,7 @@ SUBMENUS = {
     "Education": [
         "Learning roadmap",
         "Lesson library",
-        "Market regime guide",
-        "Strategy playbook",
-        "Pre-trade checklist",
-        "Rules playbook",
+        "Trading tutor",
         "Stock P&L simulator",
         "Options P&L simulator",
         "Strategy payoff lab",

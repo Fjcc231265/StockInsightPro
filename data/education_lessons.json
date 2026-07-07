@@ -82,6 +82,7 @@
         "regime-decision-map"
       ],
       "recommended_simulators": [
+        "Trading tutor",
         "Market scenario lab"
       ]
     },

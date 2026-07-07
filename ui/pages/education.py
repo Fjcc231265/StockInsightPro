@@ -19,8 +19,9 @@ from services.education_service import (
     get_module_title,
     load_education_rules,
 )
-from services.market_data_service import get_quote_summary
+from services.market_data_service import get_quote_summary, get_sector_performance
 from services.options_data_service import get_options_chain
+from services.trading_tutor_service import build_trading_tutor_report, get_tutor_checklists
 from ui.components.page_router import render_submenu_page
 from ui.education_lesson_visuals import render_lesson_visuals, render_strategy_playbook_visuals, render_visual_keys
 from utils.constants import COLORS
@@ -29,6 +30,85 @@ from utils.constants import COLORS
 def _escape_markdown_math(text: object) -> str:
     """Keep literal dollar amounts from being interpreted as inline LaTeX."""
     return str(text).replace("$", r"\$")
+
+
+def _render_tutor_suggestion(content: str) -> None:
+    """Render the tutor's live market/regime read in a blue callout."""
+    text = str(content or "").strip()
+    if text:
+        st.info(text)
+
+
+def _format_market_snapshot_suggestion(report: dict) -> str:
+    """Build a single tutor market-read block for Step 1."""
+    snapshot = report.get("market_snapshot", {})
+    symbol = report.get("symbol_context", {})
+    internals = snapshot.get("internals", {})
+    lines = ["**Tutor market read**"]
+
+    for row in snapshot.get("indices", [])[:4]:
+        name = row.get("name", "Index")
+        value = row.get("value")
+        change = float(row.get("change_pct", 0.0) or 0.0)
+        if value is not None:
+            lines.append(f"- **{name}:** {float(value):,.2f} ({change:+.2f}% today)")
+        else:
+            lines.append(f"- **{name}:** {change:+.2f}% today")
+
+    tech_bits = []
+    for label, payload in (
+        ("SPY", snapshot.get("index_technicals", {})),
+        ("QQQ", snapshot.get("qqq_technicals", {})),
+    ):
+        if payload.get("available"):
+            tech_bits.append(
+                f"{label} {payload.get('trend')} · RSI {payload.get('rsi14')} · 1W {float(payload.get('week_return_pct', 0)):+.2f}%"
+            )
+    if tech_bits:
+        lines.append("- **Index trend:** " + " · ".join(tech_bits))
+
+    vix_signal = internals.get("vix_signal")
+    if vix_signal:
+        lines.append(f"- **Volatility:** {vix_signal}")
+    breadth_signal = internals.get("breadth_signal")
+    if breadth_signal:
+        lines.append(f"- **Breadth:** {breadth_signal}")
+
+    rotation_summary = snapshot.get("sector_rotation", {}).get("summary")
+    if rotation_summary:
+        lines.append(f"- **Sector rotation:** {rotation_summary}")
+
+    ticker = symbol.get("ticker", report.get("ticker", "—"))
+    iv_context = symbol.get("iv_context")
+    iv_rank = symbol.get("options_kpis", {}).get("IV Rank")
+    if iv_context:
+        iv_line = f"- **{ticker} IV:** {iv_context}"
+        if iv_rank is not None:
+            iv_line += f" · IV Rank **{iv_rank}**"
+        lines.append(iv_line)
+
+    return "\n".join(lines)
+
+
+def _format_critical_path_suggestion(path: dict) -> str:
+    """Build a single tutor suggestion block for a critical path."""
+    parts = []
+    if path.get("market_read"):
+        parts.append(f"**Market read:** {path['market_read']}")
+    if path.get("stocks"):
+        parts.append(f"**Stocks:** {path['stocks']}")
+    if path.get("options"):
+        parts.append(f"**Options:** {path['options']}")
+    favor = path.get("sectors_favor") or []
+    if favor:
+        parts.append(f"**Sectors to favor:** {', '.join(str(item) for item in favor)}")
+    avoid_sectors = path.get("sectors_avoid") or []
+    if avoid_sectors:
+        parts.append(f"**Sectors to avoid / be careful:** {', '.join(str(item) for item in avoid_sectors)}")
+    structures = path.get("structures") or []
+    if structures:
+        parts.append("**Structures to compare:** " + ", ".join(structures))
+    return "\n\n".join(parts)
 
 
 _SIMULATOR_TOOLKIT: dict[str, str] = {
@@ -86,10 +166,7 @@ def render(submenu: str) -> None:
     handlers = {
         "Learning roadmap": _learning_roadmap,
         "Lesson library": _lesson_library,
-        "Market regime guide": _market_regime_guide,
-        "Strategy playbook": _strategy_playbook_page,
-        "Pre-trade checklist": _pre_trade_checklist,
-        "Rules playbook": _rules_playbook,
+        "Trading tutor": _trading_tutor,
         "Stock P&L simulator": _stock_pnl_simulator,
         "Options P&L simulator": _options_pnl_simulator,
         "Strategy payoff lab": _strategy_payoff_lab,
@@ -346,6 +423,367 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
             st.caption(f"Related tool: **{simulator}**")
 
 
+def _trading_tutor() -> None:
+    """Render the unified live trading tutor across regime, strategy, checklist, and rules."""
+    ticker = st.session_state.get("selected_ticker", "AAPL")
+    st.markdown("### Trading tutor")
+    st.caption(
+        "One guided workflow: read the market, choose a path, validate the trade, and confirm discipline rules. "
+        "Live index, sector, breadth, and options context are combined with your selected symbol."
+    )
+
+    with st.expander("Optional market internals (TICK / TRIN)", expanded=False):
+        st.caption(
+            "VIX is loaded from the market overview proxy (VIXY). TICK and TRIN are optional manual inputs "
+            "until a live internals feed is connected."
+        )
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            tick_value = st.number_input("NYSE TICK (optional)", value=0.0, step=50.0, key="tutor_tick")
+        with col2:
+            trin_value = st.number_input("TRIN (optional)", value=0.0, step=0.05, format="%.2f", key="tutor_trin")
+        with col3:
+            use_internals = st.checkbox("Include manual internals in regime score", value=False, key="tutor_use_internals")
+
+    manual_internals: dict[str, float] = {}
+    if use_internals:
+        if tick_value != 0:
+            manual_internals["tick"] = float(tick_value)
+        if trin_value > 0:
+            manual_internals["trin"] = float(trin_value)
+
+    force_refresh = st.button("Refresh market read", type="primary", key="tutor_refresh")
+    if force_refresh:
+        st.session_state.pop("tutor_report_cache", None)
+        st.session_state.pop("tutor_report_cache_key", None)
+
+    with st.spinner("Building live market context and tutor recommendations..."):
+        sector_frame = get_sector_performance(fetch_if_missing=True)
+        cache_key = f"{ticker}|{manual_internals}"
+        cached_report = st.session_state.get("tutor_report_cache")
+        if force_refresh or cached_report is None or st.session_state.get("tutor_report_cache_key") != cache_key:
+            st.session_state.tutor_report_cache = build_trading_tutor_report(
+                ticker,
+                sector_frame=sector_frame,
+                manual_internals=manual_internals,
+            )
+            st.session_state.tutor_report_cache_key = cache_key
+        report = st.session_state.tutor_report_cache
+
+    _render_tutor_market_snapshot(report)
+    _render_tutor_regime_conclusion(report)
+    _render_tutor_critical_paths(report)
+    _render_tutor_strategy_recommendations(report)
+    _render_tutor_checklist(report)
+    _render_tutor_rules(report)
+    _render_tutor_reference_library()
+
+
+def _render_tutor_market_snapshot(report: dict) -> None:
+    """Render live index, technical, breadth, and sector context."""
+    snapshot = report["market_snapshot"]
+    symbol = report["symbol_context"]
+    st.markdown("#### Step 1 — Market snapshot")
+    st.caption(f"Generated {report.get('generated_at', '')} · Symbol focus: **{report.get('ticker')}**")
+    _render_tutor_suggestion(_format_market_snapshot_suggestion(report))
+
+    index_cols = st.columns(min(len(snapshot.get("indices", [])), 4) or 1)
+    for col, row in zip(index_cols, snapshot.get("indices", [])):
+        with col:
+            st.metric(
+                str(row.get("name", "Index")),
+                f"{float(row.get('value', 0.0)):,.2f}" if row.get("value") is not None else "—",
+                f"{float(row.get('change_pct', 0.0)):+.2f}%",
+            )
+
+    tech = snapshot.get("index_technicals", {})
+    qqq = snapshot.get("qqq_technicals", {})
+    if tech.get("available") or qqq.get("available"):
+        st.markdown("**Index ETF technicals**")
+        tech_rows = []
+        for label, payload in (("SPY", tech), ("QQQ", qqq)):
+            if not payload.get("available"):
+                continue
+            tech_rows.append(
+                {
+                    "ETF": label,
+                    "Price": payload.get("price"),
+                    "Trend": payload.get("trend"),
+                    "RSI(14)": payload.get("rsi14"),
+                    "1W %": payload.get("week_return_pct"),
+                    "MA20": payload.get("ma20"),
+                    "MA40": payload.get("ma40"),
+                }
+            )
+        if tech_rows:
+            st.dataframe(pd.DataFrame(tech_rows), use_container_width=True, hide_index=True)
+
+    internals = snapshot.get("internals", {})
+    st.markdown("**Market internals detail**")
+    if internals.get("tick_signal"):
+        st.caption(f"TICK read: {internals['tick_signal']}")
+    if internals.get("trin_signal"):
+        st.caption(f"TRIN read: {internals['trin_signal']}")
+    breadth_rows = internals.get("breadth_rows", [])
+    if breadth_rows:
+        st.dataframe(pd.DataFrame(breadth_rows), use_container_width=True, hide_index=True)
+
+    if snapshot.get("sectors_available"):
+        st.markdown("**Sector leadership**")
+        st.caption(snapshot.get("sector_rotation", {}).get("summary", ""))
+        leader_col, laggard_col = st.columns(2)
+        with leader_col:
+            st.markdown("Leaders")
+            st.dataframe(pd.DataFrame(snapshot.get("sector_leaders", [])), use_container_width=True, hide_index=True)
+        with laggard_col:
+            st.markdown("Laggards")
+            st.dataframe(pd.DataFrame(snapshot.get("sector_laggards", [])), use_container_width=True, hide_index=True)
+
+    st.markdown("**Selected symbol context**")
+    options_kpis = symbol.get("options_kpis", {})
+    scol1, scol2, scol3, scol4 = st.columns(4)
+    with scol1:
+        st.metric(symbol.get("ticker", "—"), f"${float(symbol.get('price', 0)):,.2f}" if symbol.get("price") else "—")
+    with scol2:
+        st.metric("Sector", str(symbol.get("sector", "—")))
+    with scol3:
+        st.metric("IV context", str(symbol.get("iv_context", "—")))
+    with scol4:
+        st.metric("IV Rank", f"{options_kpis.get('IV Rank', 'n/a')}")
+
+
+def _regime_score_takeaway(score: int, confidence: str, primary: str) -> str:
+    """Return a one-paragraph interpretation of the current regime score."""
+    if score == 0:
+        return (
+            f"**Score {score:+d}** — bullish and bearish signals offset each other, so the regime is "
+            f"**{primary}**. **Confidence {confidence}** means there is no clear net tilt: "
+            "the market is mixed; use the evidence breakdown below rather than forcing a strong directional playbook."
+        )
+    if score > 0:
+        return (
+            f"**Score {score:+d}** — the live snapshot tilts bullish → **{primary}**. "
+            f"**Confidence {confidence}** reflects how many factors agreed (higher |score| = more alignment)."
+        )
+    return (
+        f"**Score {score:+d}** — the live snapshot tilts defensive → **{primary}**. "
+        f"**Confidence {confidence}** reflects how many factors agreed (higher |score| = more alignment)."
+    )
+
+
+def _render_regime_score_legend(score: int, confidence: str, primary: str) -> None:
+    """Explain how the tutor regime score and confidence are interpreted."""
+    st.markdown("**How to read regime score and confidence**")
+    st.markdown(
+        """
+The tutor **adds up** bullish (+) and bearish (−) signals from the live snapshot (SPY, VIX, breadth, sectors).
+The total maps to a regime label. **Confidence** measures the **strength of the tilt**, not whether the forecast is “correct”.
+"""
+    )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(
+            """
+| Score | Typical label |
+|------:|---------------|
+| **≥ +3** | Risk-on |
+| **+2** | Mildly bullish |
+| **+1 or 0** | Neutral / range-bound |
+| **≤ −2** | Risk-off |
+"""
+        )
+    with col2:
+        st.markdown(
+            """
+| Confidence | When it appears |
+|------------|-----------------|
+| **High** | Score ≥ +3 or ≤ −3 |
+| **Moderate** | Score +1, −1, or −2 |
+| **Low** | Score **0** (signals offset) |
+"""
+        )
+
+    st.markdown(
+        f"""
+**Your read now:** score **{score:+d}** · confidence **{confidence}** · regime **{primary}**
+
+**How points are earned** (detail in *Evidence breakdown*):
+
+- SPY uptrend: **+2** · downtrend: **−2** · mixed MAs: **0**
+- VIX proxy down ≥2%: **+1** · up ≥3%: **−2** · slightly up: **−1**
+- Breadth improving: **+1** · weakening: **−1**
+- Growth sectors leading: **+1** · defensives leading: **−1**
+
+**Low confidence** does not mean ignore the market. It means do not assume strong risk-on or risk-off when
+indexes, VIX, breadth, and sectors send offsetting messages. Favor defined-risk structures, smaller size, or wait
+for a cleaner read.
+"""
+    )
+
+
+def _render_tutor_regime_conclusion(report: dict) -> None:
+    """Render regime classification and evidence."""
+    regime = report["regime"]
+    score = int(regime.get("score", 0))
+    confidence = str(regime.get("confidence", ""))
+    primary = str(regime.get("primary", "—"))
+
+    st.markdown("#### Step 2 — Regime conclusion")
+    st.caption(
+        "The **regime score** summarizes whether the snapshot is bullish, defensive, or mixed. "
+        "**Confidence** shows how strong that tilt is. **Blue boxes** are the tutor suggestion; tables below are reference."
+    )
+    rcol1, rcol2, rcol3 = st.columns(3)
+    with rcol1:
+        st.metric("Primary regime", primary)
+    with rcol2:
+        st.metric("Confidence", confidence)
+    with rcol3:
+        st.metric("Regime score", f"{score:+d}")
+
+    _render_tutor_suggestion(_regime_score_takeaway(score, confidence, primary))
+
+    tags = regime.get("tags", [])
+    if tags:
+        st.caption("Tags: " + ", ".join(f"**{tag}**" for tag in tags))
+    summary = str(regime.get("summary", "")).strip()
+    if summary:
+        _render_tutor_suggestion(summary)
+
+    _render_regime_score_legend(score, confidence, primary)
+
+    breakdown = pd.DataFrame(regime.get("breakdown", []))
+    if not breakdown.empty:
+        st.markdown("**Evidence breakdown**")
+        st.dataframe(breakdown, use_container_width=True, hide_index=True)
+
+    render_visual_keys(
+        ["regime_decision_flow", "vix_regimes"],
+        heading="**Decision flow — your live read plus definitions**",
+        show_dividers=False,
+        key_prefix="trading_tutor_regime",
+        tutor_report=report,
+    )
+
+
+def _render_tutor_critical_paths(report: dict) -> None:
+    """Render recommended decision paths for stocks, sectors, and options."""
+    st.markdown("#### Step 3 — Critical paths")
+    st.caption("These paths connect the current market read to practical stock, sector, and options actions.")
+
+    for index, path in enumerate(report.get("critical_paths", []), start=1):
+        with st.expander(f"Path {index}: {path.get('title', 'Recommendation')}", expanded=index == 1):
+            _render_tutor_suggestion(_format_critical_path_suggestion(path))
+            avoid_list = path.get("avoid") or []
+            if avoid_list:
+                st.warning("Avoid: " + "; ".join(avoid_list))
+
+
+def _render_tutor_strategy_recommendations(report: dict) -> None:
+    """Render strategy playbook entries filtered for the current regime."""
+    st.markdown("#### Step 4 — Strategy recommendations")
+    st.caption("Filtered from the strategy playbook for the current regime and IV context.")
+
+    strategies = report.get("recommended_strategies", [])
+    if not strategies:
+        st.info("No strategy templates matched the current regime. Review the reference library below.")
+        return
+
+    strategy_names = [str(entry.get("name", "")) for entry in strategies if entry.get("name")]
+    if strategy_names:
+        _render_tutor_suggestion(
+            "**Tutor strategy matches for this regime:** " + ", ".join(strategy_names)
+        )
+
+    for entry in strategies:
+        _render_strategy_playbook_entry(entry)
+
+
+def _render_tutor_checklist(report: dict) -> None:
+    """Render interactive checklists with live auto-reads."""
+    st.markdown("#### Step 5 — Pre-trade checklist")
+    st.caption("Confirm the trade after the regime and strategy path. Live hints pre-fill context; you still confirm each box.")
+
+    hints_by_question = {
+        str(item.get("question", "")): item.get("auto_read", "")
+        for item in report.get("checklist_hints", [])
+    }
+
+    for checklist in get_tutor_checklists():
+        with st.expander(checklist.get("title", "Checklist"), expanded=checklist.get("id") == "pre-trade-options"):
+            summary = checklist.get("summary")
+            if summary:
+                st.markdown(_escape_markdown_math(summary))
+            when_to_use = checklist.get("when_to_use")
+            if when_to_use:
+                st.markdown("**When to use**")
+                st.markdown(_escape_markdown_math(when_to_use))
+            st.divider()
+            for index, item in enumerate(checklist.get("items", [])):
+                question = str(item.get("question", item)) if isinstance(item, dict) else str(item)
+                auto_read = hints_by_question.get(question)
+                if auto_read:
+                    _render_tutor_suggestion(f"**Live read:** {auto_read}")
+                _render_checklist_item(checklist.get("id", "checklist"), index, item)
+
+
+def _render_tutor_rules(report: dict) -> None:
+    """Render discipline rules filtered for the active regime."""
+    st.markdown("#### Step 6 — Rules playbook")
+    st.caption("Permanent discipline rules for the current regime. These do not pick the trade; they prevent expensive mistakes.")
+
+    rules = report.get("applicable_rules", [])
+    if not rules:
+        st.info("No regime-specific rules matched. Review the full rules library below.")
+        return
+
+    for rule in rules:
+        with st.expander(rule.get("title", "Rule"), expanded=False):
+            st.write(rule.get("lesson", ""))
+            if rule.get("example"):
+                st.caption(rule.get("example"))
+            if rule.get("action"):
+                st.success(rule.get("action"))
+            if rule.get("avoid"):
+                st.warning(rule.get("avoid"))
+            st.warning(rule.get("risk_note", "Risk management is required."))
+
+
+def _render_tutor_reference_library() -> None:
+    """Keep deep-dive reference material available inside the tutor."""
+    with st.expander("Reference library (regime lessons, full playbook, all rules)", expanded=False):
+        st.markdown("##### Regime framework lessons")
+        for lesson in get_lessons_for_module("regime-framework"):
+            _render_lesson_card(lesson, expanded=False)
+
+        st.divider()
+        st.markdown("##### Full strategy playbook")
+        for entry in get_strategy_playbook():
+            _render_strategy_playbook_entry(entry)
+
+        st.divider()
+        st.markdown("##### All discipline rules")
+        regime_filter = st.selectbox(
+            "Filter rules by regime",
+            ["All", "Bullish", "Bearish", "Sideways", "High volatility"],
+            key="tutor_rules_filter",
+        )
+        instrument_filter = st.selectbox(
+            "Filter rules by instrument",
+            ["All", "Stocks", "Options", "Stocks and Options"],
+            key="tutor_rules_instrument",
+        )
+        rules = filter_rules(
+            None if regime_filter == "All" else regime_filter,
+            None if instrument_filter == "All" else instrument_filter,
+        )
+        for rule in rules:
+            with st.expander(rule.get("title", "Rule"), expanded=False):
+                st.write(rule.get("lesson", ""))
+                st.caption(rule.get("example", ""))
+                st.warning(rule.get("risk_note", "Risk management is required."))
+
+
 def _strategy_playbook_page() -> None:
     """Render strategy playbook with simulator template hints."""
     st.markdown("### Strategy playbook")
@@ -490,7 +928,8 @@ def _market_regime_guide() -> None:
         "**Rules playbook** to confirm you are not breaking permanent discipline rules."
     )
     st.markdown(
-        """
+        _escape_markdown_math(
+            """
 **Full decision flow**
 
 1. **Market regime guide** — classify risk-on, neutral, risk-off, high volatility, or event-driven.
@@ -505,6 +944,7 @@ def _market_regime_guide() -> None:
 - **Risk-off:** VIX rises, support breaks, and rallies fail. Next step: reduce size, use protective puts or collars on existing shares, or defined-risk bearish structures.
 - **Event-driven:** earnings in one week and IV is rising. Next step: compare implied move vs your thesis before buying or selling premium.
 """
+        )
     )
     for lesson in get_lessons_for_module("regime-framework"):
         _render_lesson_card(lesson, expanded=True)
@@ -534,11 +974,13 @@ def _pre_trade_checklist() -> None:
         "If any answer is vague, revise the trade or skip it. "
         "Then confirm the trade does not violate **Rules playbook**."
     )
+    cached_report = st.session_state.get("tutor_report_cache")
     render_visual_keys(
         ["regime_decision_flow"],
-        heading="**Decision flow (before you check boxes)**",
+        heading="**Decision flow and definitions (read before you check boxes)**",
         show_dividers=False,
         key_prefix="pre_trade_checklist",
+        tutor_report=cached_report if isinstance(cached_report, dict) else None,
     )
     checklists = get_checklists()
     if not checklists:
@@ -723,12 +1165,13 @@ def _options_pnl_simulator() -> None:
             value=float(input_defaults.get("stock_price", 100.0)),
             step=1.0,
         )
+        default_strike = _default_option_strike(option_type, stock_price)
         strike = st.number_input(
             "Strike",
             min_value=0.01,
-            value=float(input_defaults.get("strike", 105.0)),
+            value=float(input_defaults.get("strike", default_strike)),
             step=1.0,
-            key=f"single_option_strike_{option_type}_{input_defaults.get('strike', 105.0)}",
+            key=f"single_option_strike_{option_type}_{input_defaults.get('strike', default_strike)}",
         )
     with col3:
         premium = st.number_input(
@@ -834,8 +1277,8 @@ def _options_pnl_simulator() -> None:
         dividend_yield / 100,
         valuation_model,
     )
-    raw_scenario_values = [
-        _option_model_value(
+    scenario_marks = [
+        _option_scenario_mark(
             option_type,
             price,
             strike,
@@ -847,17 +1290,23 @@ def _options_pnl_simulator() -> None:
         )
         for price in prices
     ]
-    values = [max(premium + (value - entry_model_value), 0.0) for value in raw_scenario_values]
-    pnl = [(value - premium) * 100 * contracts * direction_sign - round_trip_commission for value in values]
+    pnl = [
+        (mark - premium) * 100 * contracts * direction_sign - round_trip_commission for mark in scenario_marks
+    ]
     return_basis = premium * 100 * int(contracts) + round_trip_commission
     frame = _payoff_frame(prices, pnl, stock_price, return_basis)
     multiplier = 100 * int(contracts)
-    frame["Scenario value"] = [value * multiplier for value in values]
+    frame["Scenario value"] = [mark * multiplier for mark in scenario_marks]
+    frame["Scenario mark per share"] = scenario_marks
+    frame["Entry model value per share"] = entry_model_value
     frame["Entry cost"] = premium * multiplier
     frame["Commissions"] = round_trip_commission
-    frame["Gross P&L before commissions"] = [(value - premium) * multiplier * direction_sign for value in values]
+    frame["Gross P&L before commissions"] = [
+        (mark - premium) * multiplier * direction_sign for mark in scenario_marks
+    ]
     frame["Breakdown Type"] = "option"
     frame["Position Action"] = action
+    frame["Option type"] = option_type
     _render_interactive_payoff_chart(
         _line_chart(frame, "Underlying Price", "P&L", f"{action} {option_type} scenario payoff"),
         frame,
@@ -883,12 +1332,24 @@ def _options_pnl_simulator() -> None:
         f"Round-trip commission included: **\\${round_trip_commission:,.2f}**."
     )
     entry_model_gap = entry_model_value - premium
-    if abs(entry_model_gap) > max(0.25, premium * 0.25):
+    if _premium_model_gap_is_material(premium, entry_model_value):
+        immediate_mark = _option_scenario_mark(
+            option_type,
+            stock_price,
+            strike,
+            remaining_days,
+            scenario_iv,
+            risk_free_rate / 100,
+            dividend_yield / 100,
+            valuation_model,
+        )
+        immediate_pnl = (immediate_mark - premium) * 100 * contracts * direction_sign
         st.warning(
             "The entry premium is far from the model value implied by the current inputs. "
-            f"Entry premium: **\\${premium:.2f}** vs. model value: **\\${entry_model_value:.2f}**. "
-            "Scenario P&L is therefore calibrated to the entry premium and uses the model only for changes "
-            "from that entry point."
+            f"Entry premium: **\\${premium:.2f}** vs. model value: **\\${entry_model_value:.2f}** "
+            f"(gap **\\${entry_model_gap:+.2f}** per share). "
+            "Scenario P&L uses the modeled mark minus the premium you entered, so an unrealistic premium "
+            f"can show an immediate gross P&L of about **{_format_signed_money(immediate_pnl)}** even before the stock moves."
         )
     _render_option_variable_explanations()
 
@@ -1166,6 +1627,7 @@ Strike, Premium, and IV %. Use the + row control to add more stock or option leg
         key=f"strategy_pnl_selected_scenario_{preset}_{simulation_mode}",
     )
     _render_strategy_table(valid_legs, stock_price, model_inputs)
+    _render_strategy_option_pricing_notes(valid_legs, stock_price, model_inputs)
     _render_strategy_greeks(valid_legs, stock_price, model_inputs)
 
     with st.expander("How to read this strategy", expanded=True):
@@ -1424,6 +1886,40 @@ def _option_intrinsic_value(option_type: str, stock_price: float, strike: float)
     return max(stock_price - strike, 0) if option_type == "Call" else max(strike - stock_price, 0)
 
 
+def _option_scenario_mark(
+    option_type: str,
+    stock_price: float,
+    strike: float,
+    remaining_days: int,
+    scenario_iv: float,
+    risk_free_rate: float,
+    dividend_yield: float,
+    valuation_model: str,
+) -> float:
+    """Return the modeled option mark used for scenario P&L."""
+    if remaining_days <= 0:
+        return max(_option_intrinsic_value(option_type, stock_price, strike), 0.0)
+    return max(
+        _option_model_value(
+            option_type,
+            stock_price,
+            strike,
+            remaining_days,
+            scenario_iv,
+            risk_free_rate,
+            dividend_yield,
+            valuation_model,
+        ),
+        0.0,
+    )
+
+
+def _default_option_strike(option_type: str, stock_price: float) -> float:
+    """Return a sensible default strike for call vs put examples."""
+    multiplier = 1.05 if option_type == "Call" else 0.95
+    return round(stock_price * multiplier, 2)
+
+
 def _option_model_greeks(
     option_type: str,
     stock_price: float,
@@ -1644,6 +2140,176 @@ def _render_option_greeks(greeks: dict, contracts: int, direction_sign: int) -> 
     for col, (label, value, help_text) in zip(cols, greek_specs):
         with col:
             st.metric(label, f"{value:+.2f}", help=help_text)
+
+
+def _premium_model_gap_is_material(premium: float, model_value: float) -> bool:
+    """Return True when entered premium is far from the model-implied value."""
+    return abs(model_value - premium) > max(0.25, premium * 0.25)
+
+
+def _option_leg_entry_model_value(leg: dict, stock_entry_price: float, model_inputs: dict) -> float:
+    """Return the model value for one option leg at entry conditions."""
+    return _option_model_value(
+        leg["Instrument"],
+        stock_entry_price,
+        float(leg["Strike"]),
+        int(model_inputs.get("days_to_expiration", 0)),
+        max(float(leg.get("IV %", 35.0)) / 100, 0.0001),
+        float(model_inputs.get("risk_free_rate", 0.0)),
+        float(model_inputs.get("dividend_yield", 0.0)),
+        str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
+    )
+
+
+def _option_leg_pricing_diagnostics(leg: dict, stock_entry_price: float, model_inputs: dict) -> dict:
+    """Return pricing diagnostics for one option leg at the current entry assumptions."""
+    premium = float(leg["Premium"])
+    entry_model = _option_leg_entry_model_value(leg, stock_entry_price, model_inputs)
+    gap = premium - entry_model
+    quantity = int(leg["Quantity"])
+    direction_sign = 1 if leg["Action"] == "Buy" else -1
+    simulation_mode = str(model_inputs.get("simulation_mode", "At expiration"))
+    remaining_days = int(model_inputs.get("remaining_days", 0))
+
+    if simulation_mode == "Before expiration / Greeks":
+        scenario_mark = _option_scenario_mark(
+            leg["Instrument"],
+            stock_entry_price,
+            float(leg["Strike"]),
+            remaining_days,
+            max(
+                (float(leg.get("IV %", 35.0)) + float(model_inputs.get("volatility_change", 0.0))) / 100,
+                0.0001,
+            ),
+            float(model_inputs.get("risk_free_rate", 0.0)),
+            float(model_inputs.get("dividend_yield", 0.0)),
+            str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
+        )
+        immediate_gross_pnl = (scenario_mark - premium) * 100 * quantity * direction_sign
+    else:
+        scenario_mark = _option_intrinsic_value(leg["Instrument"], stock_entry_price, float(leg["Strike"]))
+        immediate_gross_pnl = (scenario_mark - premium) * 100 * quantity * direction_sign
+
+    return {
+        "leg": f"{leg['Action']} {quantity} {leg['Instrument']} {float(leg['Strike']):g}",
+        "instrument": leg["Instrument"],
+        "action": leg["Action"],
+        "quantity": quantity,
+        "strike": float(leg["Strike"]),
+        "premium_per_share": premium,
+        "entry_model_per_share": entry_model,
+        "pricing_gap_per_share": gap,
+        "pricing_gap_pct": round((gap / premium) * 100, 1) if premium > 0 else 0.0,
+        "scenario_mark_per_share": scenario_mark,
+        "immediate_gross_pnl": immediate_gross_pnl,
+        "material_gap": _premium_model_gap_is_material(premium, entry_model),
+    }
+
+
+def _render_strategy_option_pricing_notes(legs: list[dict], stock_entry_price: float, model_inputs: dict) -> None:
+    """Explain how option premiums compare to model values for each strategy leg."""
+    option_legs = [leg for leg in legs if leg["Instrument"] in {"Call", "Put"}]
+    if not option_legs:
+        return
+
+    diagnostics = [_option_leg_pricing_diagnostics(leg, stock_entry_price, model_inputs) for leg in option_legs]
+    material_gaps = [item for item in diagnostics if item["material_gap"]]
+    simulation_mode = str(model_inputs.get("simulation_mode", "At expiration"))
+    remaining_days = int(model_inputs.get("remaining_days", 0))
+    valuation_label = _valuation_model_label(str(model_inputs.get("valuation_model", "European (Black-Scholes)")))
+
+    with st.expander("Option pricing vs model (per leg)", expanded=bool(material_gaps)):
+        if simulation_mode == "Before expiration / Greeks":
+            st.markdown(
+                f"""
+**How this strategy is priced**
+
+- **Valuation model:** {valuation_label}
+- **Scenario timing:** {int(model_inputs.get('days_to_expiration', 0))} days to expiration, simulating after
+  **{int(model_inputs.get('days_to_expiration', 0)) - remaining_days}** day(s) elapsed → **{remaining_days}** days remaining
+- **Scenario option mark:** modeled option value at each underlying price using IV, rates, dividend yield, and time remaining
+- **Leg P&L formula:** `(scenario mark - premium entered) × 100 × contracts × direction`, then subtract leg commissions
+- **Important:** premiums are **not** auto-adjusted to the model. If a leg premium is far from the model, that leg can show an immediate gain or loss even before the stock moves.
+"""
+            )
+        else:
+            st.markdown(
+                """
+**How this strategy is priced**
+
+- **Simulation mode:** At expiration
+- **Scenario option mark:** intrinsic value only (`max(stock - strike, 0)` for calls, `max(strike - stock, 0)` for puts)
+- **Leg P&L formula:** `(intrinsic value at scenario price - premium entered) × 100 × contracts × direction`, then subtract leg commissions
+- **Important:** before expiration, time value and IV still matter in the real market. Use **Before expiration / Greeks** to test those effects.
+"""
+            )
+
+        pricing_rows = []
+        for item in diagnostics:
+            action_note = "paid" if item["action"] == "Buy" else "received"
+            gap_note = "aligned" if abs(item["pricing_gap_per_share"]) <= max(0.05, item["premium_per_share"] * 0.05) else (
+                "above model" if item["pricing_gap_per_share"] > 0 else "below model"
+            )
+            pricing_rows.append(
+                {
+                    "Leg": item["leg"],
+                    "Premium/share": f"${item['premium_per_share']:.2f}",
+                    "Model at entry/share": f"${item['entry_model_per_share']:.2f}",
+                    "Gap (premium - model)": f"${item['pricing_gap_per_share']:+.2f}",
+                    "Gap %": f"{item['pricing_gap_pct']:+.1f}%",
+                    "Mark at entry price/share": f"${item['scenario_mark_per_share']:.2f}",
+                    f"Immediate gross P&L ({action_note})": _format_signed_money(item["immediate_gross_pnl"]),
+                    "Premium vs model": gap_note,
+                }
+            )
+        st.dataframe(pd.DataFrame(pricing_rows), use_container_width=True, hide_index=True)
+
+        total_immediate_gross = sum(item["immediate_gross_pnl"] for item in diagnostics)
+        st.caption(
+            "Immediate gross P&L sums every option leg at the current stock entry price, **before** commissions and "
+            "before any underlying move in the chart. "
+            f"Current total: **{_format_signed_money(total_immediate_gross)}**."
+        )
+
+        if material_gaps:
+            st.warning(
+                "One or more option legs have premiums far from the model-implied value. "
+                "Review the table above before trusting the payoff chart."
+            )
+            for item in material_gaps:
+                if item["action"] == "Buy":
+                    if item["pricing_gap_per_share"] > 0:
+                        detail = (
+                            f"You entered **${item['premium_per_share']:.2f}**, but the model says about "
+                            f"**${item['entry_model_per_share']:.2f}**. As a buyer you are modeled as overpaying by "
+                            f"**${item['pricing_gap_per_share']:.2f}** per share."
+                        )
+                    else:
+                        detail = (
+                            f"You entered **${item['premium_per_share']:.2f}**, but the model says about "
+                            f"**${item['entry_model_per_share']:.2f}**. As a buyer you are modeled as getting a "
+                            f"better-than-model entry by **${abs(item['pricing_gap_per_share']):.2f}** per share."
+                        )
+                elif item["pricing_gap_per_share"] > 0:
+                    detail = (
+                        f"You entered **${item['premium_per_share']:.2f}** received, but the model says about "
+                        f"**${item['entry_model_per_share']:.2f}**. As a seller you are modeled as collecting more "
+                        f"premium than the model by **${item['pricing_gap_per_share']:.2f}** per share."
+                    )
+                else:
+                    detail = (
+                        f"You entered **${item['premium_per_share']:.2f}** received, but the model says about "
+                        f"**${item['entry_model_per_share']:.2f}**. As a seller you are modeled as collecting less "
+                        f"premium than the model by **${abs(item['pricing_gap_per_share']):.2f}** per share."
+                    )
+                st.markdown(f"- **{item['leg']}:** {detail}")
+        else:
+            st.success("All option-leg premiums are reasonably close to the model values implied by strike, IV, DTE, and rates.")
+
+        st.caption(
+            "Tip: load an Alpha Vantage option-chain reference above, then edit strikes, premiums, and IV % in the "
+            "strategy table to align each leg with a realistic market snapshot."
+        )
 
 
 def _render_strategy_greeks(legs: list[dict], stock_price: float, model_inputs: dict) -> None:
@@ -1892,23 +2558,15 @@ def _leg_pnl_breakdown(price: float, leg: dict, stock_entry_price: float, model_
 
     strike = float(leg["Strike"])
     premium = float(leg["Premium"])
+    entry_model_value = None
+    if leg["Instrument"] in {"Call", "Put"}:
+        entry_model_value = _option_leg_entry_model_value(leg, stock_entry_price, model_inputs)
     if model_inputs.get("simulation_mode") == "Before expiration / Greeks":
-        entry_volatility = max(float(leg.get("IV %", 35.0)) / 100, 0.0001)
         scenario_volatility = max(
             (float(leg.get("IV %", 35.0)) + float(model_inputs.get("volatility_change", 0.0))) / 100,
             0.0001,
         )
-        entry_model_value = _option_model_value(
-            leg["Instrument"],
-            stock_entry_price,
-            strike,
-            int(model_inputs.get("days_to_expiration", 0)),
-            entry_volatility,
-            float(model_inputs.get("risk_free_rate", 0.0)),
-            float(model_inputs.get("dividend_yield", 0.0)),
-            str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
-        )
-        scenario_model_value = _option_model_value(
+        value = _option_scenario_mark(
             leg["Instrument"],
             price,
             strike,
@@ -1918,9 +2576,8 @@ def _leg_pnl_breakdown(price: float, leg: dict, stock_entry_price: float, model_
             float(model_inputs.get("dividend_yield", 0.0)),
             str(model_inputs.get("valuation_model", "European (Black-Scholes)")),
         )
-        value = max(premium + (scenario_model_value - entry_model_value), 0.0)
     else:
-        value = max(price - strike, 0) if leg["Instrument"] == "Call" else max(strike - price, 0)
+        value = _option_intrinsic_value(leg["Instrument"], price, strike)
     commission = _option_round_trip_commission(
         quantity,
         float(model_inputs.get("option_order_commission", 0.0)),
@@ -1937,6 +2594,10 @@ def _leg_pnl_breakdown(price: float, leg: dict, stock_entry_price: float, model_
         "gross_pnl_before_commissions": gross_pnl,
         "commissions": commission,
         "net_pnl": gross_pnl - commission,
+        "premium_per_share": premium if leg["Instrument"] in {"Call", "Put"} else None,
+        "entry_model_per_share": entry_model_value,
+        "scenario_mark_per_share": value if leg["Instrument"] in {"Call", "Put"} else None,
+        "pricing_gap_per_share": (premium - entry_model_value) if entry_model_value is not None else None,
     }
 
 
@@ -2313,6 +2974,8 @@ def _render_stock_pnl_breakdown(row: pd.Series) -> None:
 def _render_option_pnl_breakdown(row: pd.Series) -> None:
     """Render single-option simulator P&L components."""
     action = str(row.get("Position Action", "Buy"))
+    scenario_mark = float(row.get("Scenario mark per share", 0.0))
+    entry_model = row.get("Entry model value per share")
     if action == "Sell":
         components = [
             ("Premium received at entry", float(row.get("Entry cost", 0.0))),
@@ -2330,6 +2993,12 @@ def _render_option_pnl_breakdown(row: pd.Series) -> None:
             ("Net P&L", float(row.get("P&L", 0.0))),
         ]
     _render_pnl_component_table(components)
+    if entry_model is not None and not pd.isna(entry_model):
+        option_type = str(row.get("Option type", "Option"))
+        st.caption(
+            f"Modeled {option_type.lower()} mark at scenario: **${scenario_mark:.2f}** per share. "
+            f"Model value at entry was **${float(entry_model):.2f}** per share."
+        )
 
 
 def _render_strategy_pnl_breakdown(row: pd.Series) -> None:
@@ -2345,18 +3014,42 @@ def _render_strategy_pnl_breakdown(row: pd.Series) -> None:
 
     leg_breakdown = row.get("Leg breakdown", [])
     if isinstance(leg_breakdown, list) and leg_breakdown:
-        leg_rows = [
-            {
+        leg_rows = []
+        for item in leg_breakdown:
+            row_data = {
                 "Leg": item.get("leg", ""),
+                "Premium/share": (
+                    f"${float(item['premium_per_share']):.2f}"
+                    if item.get("premium_per_share") is not None
+                    else "—"
+                ),
+                "Model at entry/share": (
+                    f"${float(item['entry_model_per_share']):.2f}"
+                    if item.get("entry_model_per_share") is not None
+                    else "—"
+                ),
+                "Scenario mark/share": (
+                    f"${float(item['scenario_mark_per_share']):.2f}"
+                    if item.get("scenario_mark_per_share") is not None
+                    else "—"
+                ),
                 "Entry cash flow": _format_signed_money(float(item.get("entry_cash_flow", 0.0))),
                 "Scenario cash flow": _format_signed_money(float(item.get("scenario_cash_flow", 0.0))),
                 "Gross P&L": _format_signed_money(float(item.get("gross_pnl_before_commissions", 0.0))),
                 "Commissions": _format_signed_money(-float(item.get("commissions", 0.0))),
                 "Net P&L": _format_signed_money(float(item.get("net_pnl", 0.0))),
             }
-            for item in leg_breakdown
-        ]
+            gap = item.get("pricing_gap_per_share")
+            if gap is not None:
+                row_data["Gap (premium - model)"] = f"${float(gap):+.2f}"
+            leg_rows.append(row_data)
+        st.markdown("#### Per-leg breakdown")
         st.dataframe(pd.DataFrame(leg_rows), use_container_width=True, hide_index=True)
+        st.caption(
+            "For each option leg: **scenario mark/share** is the modeled value at the selected underlying price; "
+            "**premium/share** is what you entered at entry. Leg gross P&L = "
+            "`(scenario mark - premium) × 100 × contracts × direction`."
+        )
 
 
 def _render_pnl_component_table(components: list[tuple[str, float]]) -> None:

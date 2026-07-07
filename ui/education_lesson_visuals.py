@@ -16,6 +16,7 @@ import streamlit as st
 
 from services.market_data_service import get_price_history
 from services.technical_data_service import get_support_resistance
+from services.trading_tutor_service import format_decision_flow_live_context
 from utils.constants import COLORS
 
 _LONG_TERM_MARKET_DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "us_gdp_sp500_long_term.csv"
@@ -26,6 +27,7 @@ _LONG_TERM_MARKET_DATA_SOURCE_NOTE = (
 
 _visual_key_prefix: ContextVar[str] = ContextVar("visual_key_prefix", default="")
 _chart_part_counter: ContextVar[int] = ContextVar("chart_part_counter", default=0)
+_tutor_report_context: ContextVar[dict | None] = ContextVar("tutor_report_context", default=None)
 
 
 def _plotly_chart(fig, *, part: str | None = None) -> None:
@@ -100,6 +102,7 @@ def render_visual_keys(
     heading: str | None = "**Interactive concept charts**",
     show_dividers: bool = True,
     key_prefix: str = "",
+    tutor_report: dict | None = None,
 ) -> None:
     """Render a list of registered visual keys."""
     if not visual_keys:
@@ -116,11 +119,13 @@ def render_visual_keys(
         prefix = f"{key_prefix}_{key}" if key_prefix else key
         prefix_token = _visual_key_prefix.set(prefix)
         counter_token = _chart_part_counter.set(0)
+        report_token = _tutor_report_context.set(tutor_report)
         try:
             renderer()
         finally:
             _visual_key_prefix.reset(prefix_token)
             _chart_part_counter.reset(counter_token)
+            _tutor_report_context.reset(report_token)
         if show_dividers and index < len(visual_keys) - 1:
             st.divider()
 
@@ -165,7 +170,7 @@ _VISUAL_CAPTIONS: dict[str, str] = {
     "regime_matrix": "Match the market environment before choosing a structure.",
     "vix_regimes": "VIX direction is a practical thermometer for risk appetite.",
     "iv_scale": "Judge IV relative to the symbol's own history, not in isolation.",
-    "regime_decision_flow": "Decision flow: regime → IV → structure → risk check.",
+    "regime_decision_flow": "Five-step pre-trade workflow with regime, IV, structure, and risk definitions below the chart.",
     "stock_vs_call": "Stock has linear P&L; a long call has capped loss (premium) and leveraged upside.",
     "protective_put": "Stock plus long put: floor below the put strike (minus premium paid).",
     "covered_call": "Long stock plus short call: income from premium, upside capped at the call strike.",
@@ -1511,37 +1516,274 @@ def _iv_scale() -> None:
 
 @_register("regime_decision_flow")
 def _regime_decision_flow() -> None:
+    steps = [
+        {"y": 0.90, "title": "Start with context", "subtitle": "What is the market doing today?"},
+        {"y": 0.68, "title": "Classify regime", "subtitle": "Name the environment before picking a trade"},
+        {"y": 0.46, "title": "Read IV for the symbol", "subtitle": "Is option premium cheap or rich?"},
+        {"y": 0.24, "title": "Pick structure", "subtitle": "Stock, option, spread, hedge, or no trade"},
+        {"y": 0.02, "title": "Risk check", "subtitle": "Confirm dollars at risk and exit plan"},
+    ]
+    box_width = 0.86
+    box_height = 0.14
+    x_center = 0.5
     fig = go.Figure()
-    nodes = {
-        "start": (0.5, 1),
-        "regime": (0.5, 0.75),
-        "iv": (0.5, 0.5),
-        "structure": (0.5, 0.25),
-    }
-    labels = list(nodes.keys())
-    xs = [nodes[k][0] for k in labels]
-    ys = [nodes[k][1] for k in labels]
-    fig.add_trace(go.Scatter(x=xs, y=ys, mode="markers+text", text=["Regime?", "IV cheap/expensive?", "Pick structure", "Max loss OK?"], textposition="top center", marker=dict(size=40, color=COLORS["secondary"])))
-    fig.add_annotation(x=0.5, y=1.05, text="Start with context", showarrow=False, font=dict(size=14))
-    for y in [0.75, 0.5, 0.25]:
-        fig.add_shape(type="line", x0=0.5, y0=y + 0.08, x1=0.5, y1=y + 0.17, line=dict(color="#888"))
+
+    for index, step in enumerate(steps):
+        y = step["y"]
+        fig.add_shape(
+            type="rect",
+            x0=x_center - box_width / 2,
+            x1=x_center + box_width / 2,
+            y0=y - box_height / 2,
+            y1=y + box_height / 2,
+            line=dict(color=COLORS["secondary"], width=2),
+            fillcolor="rgba(45, 106, 159, 0.10)",
+            layer="below",
+        )
+        fig.add_annotation(
+            x=x_center,
+            y=y + 0.022,
+            text=f"<b>{index + 1}. {step['title']}</b>",
+            showarrow=False,
+            font=dict(size=12, color=COLORS["primary"]),
+            align="center",
+        )
+        fig.add_annotation(
+            x=x_center,
+            y=y - 0.028,
+            text=step["subtitle"],
+            showarrow=False,
+            font=dict(size=10, color=COLORS.get("text_muted", "#5a6a7a")),
+            align="center",
+        )
+        if index < len(steps) - 1:
+            next_y = steps[index + 1]["y"]
+            upper_bottom = y - box_height / 2
+            lower_top = next_y + box_height / 2
+            connector_y = (upper_bottom + lower_top) / 2
+            fig.add_shape(
+                type="line",
+                x0=x_center,
+                x1=x_center,
+                y0=upper_bottom,
+                y1=lower_top,
+                line=dict(color="#9aa8b8", width=2),
+                layer="below",
+            )
+            fig.add_annotation(
+                x=x_center,
+                y=connector_y,
+                text="▼",
+                showarrow=False,
+                font=dict(size=11, color="#9aa8b8"),
+                align="center",
+            )
+
     fig.update_layout(
         **_chart_layout(
             "Pre-trade decision flow",
             "",
             "",
-            height=300,
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
+            height=520,
+            xaxis=dict(visible=False, range=[0, 1], fixedrange=True),
+            yaxis=dict(visible=False, range=[-0.12, 1.02], fixedrange=True),
+            margin=dict(l=24, r=24, t=56, b=16),
+            showlegend=False,
         )
     )
     _plotly_chart(fig)
+    tutor_report = _tutor_report_context.get()
+    live_context = format_decision_flow_live_context(tutor_report)
+    _render_regime_decision_flow_guide(live_context)
+
+
+def _render_tutor_live_suggestion(content: str) -> None:
+    """Render tutor live market/regime suggestions in a blue callout."""
+    text = str(content or "").strip()
+    if text:
+        st.info(text)
+
+
+def _render_regime_decision_flow_guide(live_context: dict[str, str] | None = None) -> None:
+    """Render detailed definitions for each step in the pre-trade decision flow."""
+    live_context = live_context or {}
+    has_live = bool(live_context.get("has_live_context"))
+
     st.markdown(
-        "- **Regime:** decide whether the backdrop is risk-on, neutral, risk-off, or event-driven.\n"
-        "- **IV:** decide whether premium is cheap, fair, expensive, or extreme for that stock.\n"
-        "- **Structure:** choose stock, debit spread, credit spread, hedge, or no trade based on the first two answers.\n"
-        "- **Risk check:** if max loss, assignment risk, or liquidity is not acceptable, skip or resize."
+        """
+**How to use this flow**
+
+Do not jump straight to a favorite strategy. Answer the steps in order. Each later step depends on the
+answers from the steps above it. If step 5 fails, the correct action is often **no trade** or **smaller size** —
+not forcing the original idea.
+"""
     )
+    if has_live:
+        st.caption(
+            "Steps 1–4 below are pre-filled from the **Trading tutor** live market read above. "
+            "Blue boxes are the tutor suggestion; reference definitions follow each divider."
+        )
+
+    with st.expander(
+        "Step 1 — Start with context (what to observe)",
+        expanded=True,
+    ):
+        if has_live and live_context.get("step1"):
+            st.markdown("#### Your live context read")
+            _render_tutor_live_suggestion(live_context["step1"])
+            st.divider()
+            st.markdown("#### What each input means (reference)")
+        st.markdown(
+            """
+| Input | What it tells you | Practical read |
+|-------|-------------------|----------------|
+| **Index trend (SPY / QQQ)** | Is the broad market rising, falling, or chopping? | Uptrend supports bullish trades; breakdown supports defense |
+| **VIX (or VIX proxy)** | Is fear entering or leaving the market? | Falling VIX often supports risk-taking; rising VIX warns to reduce size |
+| **Breadth** | Are many stocks participating, or only a few leaders? | Strong breadth supports breakouts; weak breadth makes breakouts fragile |
+| **Sector leadership** | Is money flowing into growth/cyclicals or into defensives? | Growth leading = risk appetite; defensives leading = caution |
+"""
+        )
+        if not has_live:
+            st.markdown(
+                """
+**Example:** SPY is above its 20-day average, VIX is falling, technology leads, and breadth is positive.
+That context supports looking for bullish structures — but you still have not chosen the trade yet.
+
+Open **Trading tutor** and run **Refresh market read** to auto-fill this step with live data.
+"""
+            )
+
+    with st.expander("Step 2 — Classify regime (definitions)", expanded=True):
+        if has_live and live_context.get("step2"):
+            st.markdown("#### Your live regime read")
+            _render_tutor_live_suggestion(live_context["step2"])
+            st.divider()
+            st.markdown("#### Regime definitions (reference)")
+        st.markdown(
+            """
+A **regime** is a short label for the market environment. Use the evidence from step 1 to pick one primary regime.
+
+#### Risk-on
+Investors are willing to buy risk assets. Upside moves tend to hold, dips are often bought, and volatility often cools.
+
+- **Typical evidence:** indexes trend up or hold support; VIX stable or falling; growth sectors lead; breadth positive; bad headlines are often ignored
+- **Often fits:** long stock, long calls, bull call spreads, buying breakouts with defined risk
+- **Often avoid:** capping upside too early with tight covered calls in a strong trend
+
+#### Neutral / range-bound
+The market is chopping between support and resistance without a clean directional edge.
+
+- **Typical evidence:** repeated failed breakouts; indexes flat over several sessions; rotations between sectors; IV may be elevated even without a strong trend
+- **Often fits:** covered calls, cash-secured puts, credit spreads, iron condors, calendars
+- **Often avoid:** buying short-dated ATM options without a catalyst (theta works against you)
+
+#### Risk-off
+Investors are reducing risk. Support breaks more easily, correlations rise, and protection demand increases.
+
+- **Typical evidence:** indexes break support; VIX rising; defensives lead; breadth weak; bad news is punished quickly
+- **Often fits:** cash, smaller size, protective puts, collars, bear put spreads
+- **Often avoid:** oversized bullish bets or naked short puts into a falling market
+
+#### Event-driven / high IV
+A known catalyst (earnings, Fed, macro release) may create a large move, and option premiums are often rich.
+
+- **Typical evidence:** scheduled event within days; IV rank elevated; implied move priced into options
+- **Often fits:** defined-risk spreads, hedges, comparing implied move vs your thesis before buying premium
+- **Often avoid:** undefined-risk short options and illiquid strikes around the event
+
+**Rule of thumb:** write one sentence: *"Today looks mostly ___ because ___."* If you cannot complete that sentence, pause before trading.
+"""
+        )
+
+    with st.expander("Step 3 — Read IV for the symbol (cheap, fair, expensive, extreme)", expanded=has_live):
+        if has_live and live_context.get("step3"):
+            st.markdown("#### Your live IV read")
+            _render_tutor_live_suggestion(live_context["step3"])
+            st.divider()
+            st.markdown("#### IV definitions (reference)")
+        st.markdown(
+            """
+**Implied volatility (IV)** is what the options market charges for expected movement. Judge IV **relative to that symbol's own history** (IV Rank), not in isolation.
+
+| IV Rank (illustrative) | Label | What it usually means | Buyer implication | Seller implication |
+|------------------------|-------|----------------------|-------------------|-------------------|
+| **Below ~35** | Cheap / low | Premium is low vs recent history | Long options cost less, but you still need a move | Less credit for sellers; need strong range thesis |
+| **~35–60** | Fair / medium | Normal premium for this name | Debit spreads and stock both reasonable | Credit structures need clear range or willingness to own |
+| **~60–80** | Elevated / expensive | Premium is rich | Prefer spreads over naked long options | Credit may pay well, but gap risk rises |
+| **Above ~80** | Extreme / event-like | Market prices a large move | Buying premium is costly; IV crush risk after event | Selling premium is risky unless defined-risk and sized small |
+
+**Example:** IV Rank is 78 one week before earnings. A naked long call is expensive and may lose from IV crush even if direction is right. Compare the implied move to your thesis, or use a spread / wait.
+"""
+        )
+
+    with st.expander("Step 4 — Pick structure (match regime + IV to the trade)", expanded=has_live):
+        if has_live and live_context.get("step4"):
+            st.markdown("#### Your live structure suggestions")
+            _render_tutor_live_suggestion(live_context["step4"])
+            st.divider()
+            st.markdown("#### Structure map (reference)")
+        st.markdown(
+            """
+The structure is *how* you express the idea after regime and IV are clear.
+
+| Your read | IV cheap / fair | IV elevated / expensive |
+|-----------|-----------------|-------------------------|
+| **Risk-on bullish** | Stock, long call, bull call spread | Bull call spread preferred over naked call |
+| **Neutral / range** | Stock only if range is clear; otherwise income structures | Covered call, CSP, credit spread, iron condor |
+| **Risk-off / hedge** | Protective put, collar, reduce stock size | Same hedges; puts may already be expensive — use spreads |
+| **Event / unclear direction** | Long straddle only if implied move < your expected move | Iron butterfly / defined-risk credit with strict max loss |
+
+**Structure definitions (quick)**
+
+- **Stock:** full upside and downside; no expiration; needs more capital
+- **Long call / put:** defined risk (premium); leveraged; time decay works against you
+- **Debit spread:** cheaper than naked option; caps profit and loss
+- **Credit spread / iron condor:** collect premium; profits if price stays in range; gap risk remains
+- **Covered call / CSP:** income structures; assignment must be acceptable
+- **Collar / protective put:** hedge stock you already own
+- **No trade:** valid outcome when regime, IV, or risk check does not support the idea
+"""
+        )
+
+    with st.expander("Step 5 — Risk check (final gate before the order)", expanded=False):
+        st.markdown(
+            """
+Even a good-looking setup fails this step if risk is undefined.
+
+1. **Max loss in dollars and % of account** — convert contracts into real money. If uncomfortable, reduce size.
+2. **Invalidation** — what price or date proves the thesis wrong? Options also need a **time stop** (theta).
+3. **If price does nothing** — many option losses come from no movement, not wrong direction.
+4. **Liquidity** — tight bid/ask on the strikes you plan to trade; wide spreads increase true cost.
+5. **Assignment / margin** — for short options and stock-plus-option structures, know what assignment means.
+6. **Exit plan** — profit target, loss limit, and roll rules written before entry.
+
+**If any answer is vague, revise the trade or skip it.** The flow ends here — not at the order ticket.
+"""
+        )
+
+    if has_live:
+        st.markdown(
+            """
+**Worked example (from today's tutor read)**
+
+Use the live sections in steps 1–4 above as your answer key, then complete **step 5 — Risk check**
+before opening **Strategy payoff lab** or sending an order.
+"""
+        )
+    else:
+        st.markdown(
+            """
+**Worked example (short)**
+
+1. **Context:** SPY uptrend, VIX falling, tech leading, breadth positive.
+2. **Regime:** **Risk-on** — dips are being bought and volatility is cooling.
+3. **IV:** Stock IV Rank = 28 → **cheap / fair** for a directional bullish trade.
+4. **Structure:** Compare **stock** vs **bull call spread** (defined risk) vs **long call** (more leverage).
+5. **Risk check:** Max loss = spread debit; invalidation = close below breakout support; skip if spread is illiquid.
+
+Only after all five steps should you open **Strategy payoff lab** or send an order.
+"""
+        )
 
 
 @_register("stock_vs_call")
