@@ -570,7 +570,7 @@
         },
         {
           "heading": "Combo orders for spreads",
-          "body": "For multi-leg trades, a single combo order can control the net debit or credit. A debit spread means you pay net premium to enter. Example: Buy to open the 100 call and sell to open the 105 call as one vertical spread for a $1.80 net debit. A credit spread means you receive net premium to enter. Example: Sell to open the 100 put and buy to open the 95 put as one vertical spread for a $1.20 net credit. Entering legs one by one exposes you to legging risk if price moves before all legs fill."
+          "body": "For multi-leg trades, a single combo order can control the net debit or credit. A **bull call spread** or **bear put spread** is entered for a net debit. Example: buy to open the 100 call and sell to open the 105 call as one **bull call spread** for a $1.80 net debit. A **bull put spread** or **bear call spread** is entered for a net credit. Example: sell to open the 100 put and buy to open the 95 put as one **bull put spread** for a $1.20 net credit. Entering legs one by one exposes you to legging risk if price moves before all legs fill."
         },
         {
           "heading": "Closing spreads correctly",
@@ -589,10 +589,10 @@
         "Buy to open starts a long option; sell to close exits that long option.",
         "Sell to open starts a short option obligation; buy to close exits that obligation.",
         "Use limit orders to define acceptable option pricing instead of relying on market orders.",
-        "For spreads, think in net debit or net credit and use combo orders when possible.",
+        "For spreads, use named structures (bull call spread, bear put spread, bull put spread, bear call spread) and combo orders when possible.",
         "Do not leg into complex spreads unless you understand execution risk."
       ],
-      "practice": "Write the exact order action, quantity, strike, expiration, and limit price for opening and closing a long call, short put, covered call, debit spread, and credit spread before paper trading."
+      "practice": "Write the exact order action, quantity, strike, expiration, and limit price for opening and closing a long call, short put, covered call, bull call spread, and bull put spread before paper trading."
     },
     {
       "id": "american-european",
@@ -695,7 +695,7 @@
         },
         {
           "heading": "Relative IV and strategy choice",
-          "body": "Do not judge IV only by the absolute number. A 35% IV may be high for a slow utility stock but low for a volatile growth stock. Compare IV to the symbol's own history using concepts like IV rank, IV percentile, or recent average IV. The question is: are options expensive or cheap relative to this stock's normal behavior?\n\nHigh relative IV means option premium is expensive compared with that stock's history. If you expect the stock to stay inside a range or IV to fall, defined-risk credit spreads, covered calls, cash-secured puts, or iron condors may fit better than buying expensive premium. Low relative IV means options are cheaper compared with history. If you expect a strong move, long calls, long puts, debit spreads, or calendars may be more attractive.\n\nThe trade structure should match both your directional view and your volatility view. Direction answers where you think the stock will go. IV answers whether you want to buy premium, sell premium, or avoid the trade."
+          "body": "Do not judge IV only by the absolute number. A 35% IV may be high for a slow utility stock but low for a volatile growth stock. Compare IV to the symbol's own history using concepts like IV rank, IV percentile, or recent average IV. The question is: are options expensive or cheap relative to this stock's normal behavior?\n\nHigh relative IV means option premium is expensive compared with that stock's history. If you expect the stock to stay inside a range or IV to fall, **bull put spreads**, **bear call spreads**, covered calls, cash-secured puts, or iron condors may fit better than buying expensive premium. Low relative IV means options are cheaper compared with history. If you expect a strong move, long calls, long puts, **bull call spreads**, **bear put spreads**, or calendars may be more attractive.\n\nThe trade structure should match both your directional view and your volatility view. Direction answers where you think the stock will go. IV answers whether you want to buy premium, sell premium, or avoid the trade."
         },
         {
           "heading": "Expected move from option prices",
@@ -820,19 +820,19 @@
         },
         {
           "heading": "Risk-on regime",
-          "body": "Risk-on means traders are willing to own risk. Indexes trend higher or recover quickly from dips, volatility often falls, growth and cyclical sectors lead, credit stress is contained, and breadth usually improves. In this environment, bullish stock trades, call debit spreads, long calls with enough time, and pullback entries can work well.\n\nExample: the S&P 500 is above rising moving averages, VIX falls from 22 to 16, semiconductors and discretionary stocks lead, and bad news is ignored. A trader looking at a strong stock breaking out may choose long stock, a call spread, or a slightly ITM call. The same trader should be careful with tight covered calls that cap upside too early, because strong trends can keep running."
+          "body": "Risk-on means traders are willing to own risk. Indexes trend higher or recover quickly from dips, volatility often falls, growth and cyclical sectors lead, credit stress is contained, and breadth usually improves. In this environment, **bullish stock trades**, **bull call spreads**, **long calls** with enough time, and **pullback entries** can work well.\n\nExample: the S&P 500 is above rising moving averages, VIX falls from 22 to 16, semiconductors and discretionary stocks lead, and bad news is ignored. A trader looking at a strong stock breaking out may choose **long stock**, a **bull call spread**, or a **slightly ITM call**. The same trader should be careful with tight **covered calls** that cap upside too early, because strong trends can keep running."
         },
         {
           "heading": "Neutral or range-bound regime",
-          "body": "Neutral means the market is not clearly trending. Indexes chop around moving averages, leadership rotates quickly, breakouts often fail, and dips may bounce without follow-through. Option premium may be moderate or elevated, especially around events. In this environment, structure matters more than directional opinion.\n\nExample: the index has gone sideways for three weeks, VIX is stable around 18-22, and leadership changes every few days. A trader expecting more chop may prefer covered calls, cash-secured puts, iron condors, calendars, or defined-risk credit spreads instead of buying short-dated calls that need immediate trend continuation. Directional trades should often be smaller, quicker, and closer to support/resistance zones."
+          "body": "Neutral means the market is not clearly trending. Indexes chop around moving averages, leadership rotates quickly, breakouts often fail, and dips may bounce without follow-through. Option premium may be moderate or elevated, especially around events. In this environment, structure matters more than directional opinion.\n\nExample: the index has gone sideways for three weeks, VIX is stable around 18-22, and leadership changes every few days. A trader expecting more chop may prefer **covered calls**, **cash-secured puts**, **bull put spreads**, **bear call spreads**, **iron condors**, or **calendars** instead of buying short-dated calls that need immediate trend continuation. Directional trades should often be smaller, quicker, and closer to support/resistance zones."
         },
         {
           "heading": "Risk-off regime",
-          "body": "Risk-off means capital preservation becomes more important. Indexes break support, rallies are sold, correlations rise, VIX spikes, breadth weakens, and defensive sectors or cash outperform. In this environment, many individual bullish setups fail because broad selling pressure overwhelms stock-specific strength.\n\nExample: VIX jumps from 17 to 28, the index loses the 50-day moving average, more stocks are making new lows, and credit spreads widen. A trader may reduce size, hold cash, use protective puts or collars, avoid naked short options, and wait for volatility to stabilize. If trading bearish ideas, defined-risk put spreads may be safer than oversized long puts after IV has already spiked."
+          "body": "Risk-off means capital preservation becomes more important. Indexes break support, rallies are sold, correlations rise, VIX spikes, breadth weakens, and defensive sectors or cash outperform. In this environment, many individual bullish setups fail because broad selling pressure overwhelms stock-specific strength.\n\nExample: VIX jumps from 17 to 28, the index loses the 50-day moving average, more stocks are making new lows, and credit spreads widen. A trader may reduce size, hold cash, use **protective puts** or **collars**, avoid naked short options, and wait for volatility to stabilize. If trading bearish ideas, **bear put spreads** may be safer than oversized **long puts** after IV has already spiked."
         },
         {
           "heading": "High-volatility event regime",
-          "body": "High volatility does not always mean bearish. Sometimes volatility is high because of earnings, macro events, Fed decisions, product announcements, or sector-specific news. The key question is whether the market is pricing a move that is larger or smaller than what you expect.\n\nExample: a stock reports earnings tomorrow and IV is extremely elevated. Buying an ATM call may lose money even if the stock rises, because IV can collapse after the event. If you expect a move smaller than the market is pricing, defined-risk premium-selling structures may fit. If you expect a very large move and direction is uncertain, a long straddle or strangle may fit, but only if the expected move is bigger than the premium paid."
+          "body": "High volatility does not always mean bearish. Sometimes volatility is high because of earnings, macro events, Fed decisions, product announcements, or sector-specific news. The key question is whether the market is pricing a move that is larger or smaller than what you expect.\n\nExample: a stock reports earnings tomorrow and IV is extremely elevated. Buying an **ATM call** may lose money even if the stock rises, because IV can collapse after the event. If you expect a move smaller than the market is pricing, **defined-risk premium-selling structures** may fit. If you expect a very large move and direction is uncertain, a **long straddle** or **strangle** may fit, but only if the expected move is bigger than the premium paid."
         },
         {
           "heading": "Macro vs flow",
@@ -861,15 +861,15 @@
       "sections": [
         {
           "heading": "VIX as thermometer",
-          "body": "VIX is a market-implied volatility gauge based on S&P 500 options. Think of it as a thermometer for index uncertainty and protection demand. A low or falling VIX often means traders are less worried and option premiums are cooling. A rising VIX often means traders are paying more for protection and correlations may increase.\n\nA falling VIX can support risk-on trades because option sellers are less stressed, dips are often bought, and call spreads or long stock can work. A stable mid-range VIX can support income structures if price is range-bound. A sharply rising VIX usually argues for smaller size, defined risk, hedges, or patience because price movement can become fast and gaps can become larger."
+          "body": "VIX is a market-implied volatility gauge based on S&P 500 options. Think of it as a thermometer for index uncertainty and protection demand. A low or falling VIX often means traders are less worried and option premiums are cooling. A rising VIX often means traders are paying more for protection and correlations may increase.\n\nA falling VIX can support risk-on trades because option sellers are less stressed, dips are often bought, and **bull call spreads** or **long stock** can work. A stable mid-range VIX can support **income structures** if price is range-bound. A sharply rising VIX usually argues for smaller size, **defined-risk structures**, **hedges**, or patience because price movement can become fast and gaps can become larger."
         },
         {
           "heading": "High vs low IV on the stock",
-          "body": "VIX describes broad index volatility, but each stock also has its own implied volatility. A stock can have high IV because of earnings, takeover rumors, litigation, product news, or sector stress. A stock can have low IV when the market expects little movement.\n\nHigh IV means options are expensive relative to the movement being priced. If you expect the stock to stay inside a range or the event move to be smaller than expected, defined-risk credit spreads, iron condors, covered calls, or cash-secured puts may fit. Low IV means options are cheaper relative to normal expectations. If you expect a strong move, long calls, long puts, debit spreads, or calendars may fit better.\n\nExample: if a stock's IV is 75% before earnings and the ATM straddle prices a 9% move, buying calls requires more than just being bullish. The stock may need to rise more than the priced move, or IV crush can erase the gain. If IV is 18% and a catalyst is developing, buying premium may be more attractive because less movement is priced in."
+          "body": "VIX describes broad index volatility, but each stock also has its own implied volatility. A stock can have high IV because of earnings, takeover rumors, litigation, product news, or sector stress. A stock can have low IV when the market expects little movement.\n\nHigh IV means options are expensive relative to the movement being priced. If you expect the stock to stay inside a range or the event move to be smaller than expected, **bull put spreads**, **bear call spreads**, **iron condors**, **covered calls**, or **cash-secured puts** may fit. Low IV means options are cheaper relative to normal expectations. If you expect a strong move, **long calls**, **long puts**, **bull call spreads**, or **calendars** may fit better.\n\nExample: if a stock's IV is 75% before earnings and the ATM straddle prices a 9% move, buying calls requires more than just being bullish. The stock may need to rise more than the priced move, or IV crush can erase the gain. If IV is 18% and a catalyst is developing, buying premium may be more attractive because less movement is priced in."
         },
         {
           "heading": "Volatility expansion vs contraction",
-          "body": "Option buyers generally benefit when volatility expands after entry. Option sellers generally benefit when volatility contracts after entry. This does not mean buying options is always good in low IV or selling options is always good in high IV; direction, timing, liquidity, and risk definition still matter.\n\nExample: buying a call before a breakout can work better if IV rises while price rises. Selling a credit spread before an event can work if the stock stays inside the expected range and IV falls afterward. But selling premium during a panic without defined risk can be dangerous because volatility can keep expanding and losses can grow quickly."
+          "body": "Option buyers generally benefit when volatility expands after entry. Option sellers generally benefit when volatility contracts after entry. This does not mean buying options is always good in low IV or selling options is always good in high IV; direction, timing, liquidity, and risk definition still matter.\n\nExample: buying a call before a breakout can work better if IV rises while price rises. Selling a **bull put spread** or **bear call spread** before an event can work if the stock stays inside the expected range and IV falls afterward. But selling premium during a panic without defined risk can be dangerous because volatility can keep expanding and losses can grow quickly."
         },
         {
           "heading": "Position sizing in volatile regimes",
@@ -879,7 +879,7 @@
       "key_points": [
         "Falling VIX often supports risk-on behavior; rising VIX warns that protection demand is increasing.",
         "High IV can favor defined-risk premium selling if you expect stability or IV contraction.",
-        "Low IV can favor long options or debit spreads if you expect movement.",
+        "Low IV can favor long options, bull call spreads, or bear put spreads if you expect movement.",
         "High volatility requires smaller size and clearer max-loss planning.",
         "Do not buy expensive options without a catalyst for movement."
       ],
@@ -913,7 +913,7 @@
         },
         {
           "heading": "Classification into action",
-          "body": "After classifying IV, translate it into action. Low relative IV plus a clear catalyst can support buying calls, puts, debit spreads, or calendars. Medium IV may support balanced structures such as debit spreads, covered calls, or waiting for better pricing. High IV may support defined-risk credit spreads, iron condors, cash-secured puts, or covered calls if you expect stability. Extreme IV may justify avoiding the trade unless your edge is very clear and risk is defined.\n\nThe classification does not replace chart analysis or thesis quality. It tells you whether the option market is charging a cheap, fair, or expensive price for the movement you expect."
+          "body": "After classifying IV, translate it into action. Low relative IV plus a clear catalyst can support **long calls**, **bull call spreads**, **long puts**, or **calendars**. Medium IV may support balanced structures such as **bull call spreads**, **covered calls**, or waiting for better pricing. High IV may support **bull put spreads**, **bear call spreads**, **iron condors**, **cash-secured puts**, or **covered calls** if you expect stability. Extreme IV may justify avoiding the trade unless your edge is very clear and risk is defined.\n\nThe classification does not replace chart analysis or thesis quality. It tells you whether the option market is charging a cheap, fair, or expensive price for the movement you expect."
         }
       ],
       "key_points": [
@@ -938,23 +938,23 @@
       "sections": [
         {
           "heading": "Risk-on",
-          "body": "If the market is risk-on, favor structures that participate in upside. Long stock, call debit spreads, slightly ITM calls, and momentum entries often fit. Pullbacks to support can be opportunities when breadth is strong and VIX is falling.\n\nExample: a stock is breaking out with its sector leading, the index trend is strong, and VIX is falling. A call debit spread can express bullish direction with defined risk. Long stock can fit if you want no expiration risk. A tight covered call may be less attractive because it caps upside in an environment where trends can extend."
+          "body": "If the market is risk-on, favor structures that participate in upside. **Long stock**, **bull call spreads**, **slightly ITM calls**, and **momentum entries** often fit. Pullbacks to support can be opportunities when breadth is strong and VIX is falling.\n\nExample: a stock is breaking out with its sector leading, the index trend is strong, and VIX is falling. A **bull call spread** can express bullish direction with defined risk. **Long stock** can fit if you want no expiration risk. A tight **covered call** may be less attractive because it caps upside in an environment where trends can extend."
         },
         {
           "heading": "Neutral + high IV",
-          "body": "If the market is neutral and IV is elevated, favor structures that can benefit from time decay or IV contraction while keeping risk defined. Covered calls, cash-secured puts, put credit spreads, call credit spreads, iron condors, and diagonals can fit if the chart supports a range and you understand assignment risk.\n\nExample: a stock is trading between $95 and $105, IV is high after a volatility spike, and there is no immediate breakout signal. A defined-risk iron condor outside the range may fit better than buying an ATM call. The goal is not to predict a huge move; the goal is to get paid if price stays inside the expected range and IV cools."
+          "body": "If the market is neutral and IV is elevated, favor structures that can benefit from time decay or IV contraction while keeping risk defined. **Covered calls**, **cash-secured puts**, **bull put spreads**, **bear call spreads**, **iron condors**, and **diagonals** can fit if the chart supports a range and you understand assignment risk.\n\nExample: a stock is trading between $95 and $105, IV is high after a volatility spike, and there is no immediate breakout signal. A defined-risk **iron condor** outside the range may fit better than buying an ATM call. The goal is not to predict a huge move; the goal is to get paid if price stays inside the expected range and IV cools."
         },
         {
           "heading": "Risk-off",
-          "body": "If the market is risk-off, prioritize survival. Reduce size, hold more cash, use protective puts or collars, avoid naked short options, and be careful buying premium after IV has already exploded. Bearish trades should still be defined-risk and sized smaller because reversals can be violent.\n\nExample: the index breaks support, VIX spikes, and correlations rise. If you own a large stock position, a collar can reduce downside by buying a put and selling a call. If you want bearish exposure, a put debit spread may be cleaner than buying an expensive naked put after IV has already surged. Sometimes the correct trade is no trade."
+          "body": "If the market is risk-off, prioritize survival. Reduce size, hold more cash, use **protective puts** or **collars**, avoid naked short options, and be careful buying premium after IV has already exploded. Bearish trades should still be defined-risk and sized smaller because reversals can be violent.\n\nExample: the index breaks support, VIX spikes, and correlations rise. If you own a large stock position, a **collar** can reduce downside by buying a put and selling a call. If you want bearish exposure, a **bear put spread** may be cleaner than buying an expensive **long put** after IV has already surged. Sometimes the correct trade is no trade."
         },
         {
           "heading": "Low IV + catalyst",
-          "body": "If IV is low and a credible catalyst is developing, buying premium can be reasonable. Long calls, long puts, debit spreads, calendars, or diagonals can fit depending on direction and timing. The key is that the option market is not already pricing a large move.\n\nExample: a stock is compressing near resistance, IV is low relative to its history, and earnings are still several weeks away. A call debit spread or longer-dated call may offer convex exposure before IV rises. But if there is no catalyst and the stock is not moving, cheap options can still decay."
+          "body": "If IV is low and a credible catalyst is developing, buying premium can be reasonable. **Long calls**, **long puts**, **bull call spreads**, **calendars**, or **diagonals** can fit depending on direction and timing. The key is that the option market is not already pricing a large move.\n\nExample: a stock is compressing near resistance, IV is low relative to its history, and earnings are still several weeks away. A **bull call spread** or **longer-dated call** may offer convex exposure before IV rises. But if there is no catalyst and the stock is not moving, cheap options can still decay."
         },
         {
           "heading": "High IV + uncertain direction",
-          "body": "If IV is high and direction is uncertain, do not automatically buy both sides. A long straddle can work only if the move is larger than the premium paid and IV crush does not overwhelm the trade. If you expect the market is overpricing the move, defined-risk premium-selling structures may fit better.\n\nExample: the ATM straddle prices a 10% earnings move, but the stock historically moves around 5% and the chart has clear support/resistance. A defined-risk iron condor may fit if you accept the event risk. If you believe a 15% move is realistic, buying a straddle may fit, but position size must reflect the possibility of losing most of the premium."
+          "body": "If IV is high and direction is uncertain, do not automatically buy both sides. A **long straddle** can work only if the move is larger than the premium paid and IV crush does not overwhelm the trade. If you expect the market is overpricing the move, **defined-risk premium-selling structures** may fit better.\n\nExample: the ATM straddle prices a 10% earnings move, but the stock historically moves around 5% and the chart has clear support/resistance. A defined-risk **iron condor** may fit if you accept the event risk. If you believe a 15% move is realistic, buying a **long straddle** may fit, but position size must reflect the possibility of losing most of the premium."
         },
         {
           "heading": "When to wait",
@@ -962,7 +962,7 @@
         }
       ],
       "key_points": [
-        "Risk-on favors participating in upside with stock, calls, or debit spreads.",
+        "Risk-on favors participating in upside with stock, calls, or bull call spreads.",
         "Neutral plus high IV favors defined-risk income structures when range assumptions are reasonable.",
         "Risk-off favors cash, hedges, smaller size, and defined-risk bearish structures.",
         "Low IV plus catalyst can favor buying premium.",
@@ -991,7 +991,7 @@
         },
         {
           "heading": "Break-even and required move",
-          "body": "For a long call at expiration, break-even equals strike plus premium. If you buy a 100 call for $4, expiration break-even is $104. A move from $100 to $103 is bullish, but it is not enough at expiration because the option is worth $3 and you paid $4.\n\nThis is why the phrase 'I am bullish' is not enough. You need to ask: how far can the stock move, how soon can it move, and is the option premium reasonable? If the expected move is smaller than the premium hurdle, stock or a debit spread may be better than a naked long call."
+          "body": "For a long call at expiration, break-even equals strike plus premium. If you buy a 100 call for $4, expiration break-even is $104. A move from $100 to $103 is bullish, but it is not enough at expiration because the option is worth $3 and you paid $4.\n\nThis is why the phrase 'I am bullish' is not enough. You need to ask: how far can the stock move, how soon can it move, and is the option premium reasonable? If the expected move is smaller than the premium hurdle, stock or a **bull call spread** may be better than a naked long call."
         },
         {
           "heading": "When stock is better",
@@ -1138,11 +1138,11 @@
     {
       "id": "vertical-credit-spreads",
       "module": "core-strategies",
-      "title": "Vertical credit spreads",
+      "title": "Bull put and bear call spreads",
       "objectives": [
         "Earn premium with capped risk.",
         "Understand max gain, max loss, break-even, and probability trade-offs.",
-        "Use credit spreads when direction and volatility assumptions support defined-risk premium selling."
+        "Use bull put spreads and bear call spreads when direction and volatility assumptions support defined-risk premium selling."
       ],
       "sections": [
         {
@@ -1154,12 +1154,12 @@
           "body": "A bear call spread sells a call at a lower strike and buys a call at a higher strike with the same expiration. It is bearish to neutral because it profits if the stock stays below the short call strike. The long higher-strike call defines the risk.\n\nExample: stock is at $100. Sell the 105 call for $2.10 and buy the 110 call for $0.90. Net credit is $1.20, or $120 per spread. Max gain is $120. Max loss is $5.00 - $1.20 = $3.80, or $380. Break-even is short strike plus credit: $105 + $1.20 = $106.20."
         },
         {
-          "heading": "When credit spreads fit",
-          "body": "Credit spreads can fit when IV is elevated, you expect price to stay above or below a level, and you want defined risk instead of naked short options. They are not pure direction trades; they combine direction, time decay, volatility, and probability.\n\nA bull put spread may fit near support in a neutral-to-bullish regime. A bear call spread may fit near resistance in a neutral-to-bearish regime. In both cases, the short strike should be placed where your thesis says price is unlikely to finish."
+          "heading": "When these spreads fit",
+          "body": "Bull put spreads and bear call spreads can fit when IV is elevated, you expect price to stay above or below a level, and you want defined risk instead of naked short options. They are not pure direction trades; they combine direction, time decay, volatility, and probability.\n\nA **bull put spread** may fit near support in a neutral-to-bullish regime. A **bear call spread** may fit near resistance in a neutral-to-bearish regime. In both cases, the short strike should be placed where your thesis says price is unlikely to finish."
         },
         {
           "heading": "Risk and management",
-          "body": "Credit spreads have capped risk, but losses can still be larger than the credit received. A common mistake is focusing on high win rate while ignoring loss size. If you collect $1 and risk $4, one full loss can erase several winners.\n\nMany traders close credit spreads after capturing 50-80% of max profit instead of waiting for expiration. This reduces gamma and assignment risk near expiration. If the short strike is threatened, decide whether to close, adjust, or accept the defined loss. Do not add size just because the spread moved against you."
+          "body": "Bull put spreads and bear call spreads have capped risk, but losses can still be larger than the credit received. A common mistake is focusing on high win rate while ignoring loss size. If you collect $1 and risk $4, one full loss can erase several winners.\n\nMany traders close these spreads after capturing 50-80% of max profit instead of waiting for expiration. This reduces gamma and assignment risk near expiration. If the short strike is threatened, decide whether to close, adjust, or accept the defined loss. Do not add size just because the spread moved against you."
         }
       ],
       "key_points": [
@@ -1184,7 +1184,7 @@
       "sections": [
         {
           "heading": "Structure",
-          "body": "An iron condor combines two credit spreads: a bull put spread below the market and a bear call spread above the market. You sell an OTM put spread and sell an OTM call spread at the same expiration. The short put and short call define the profit zone; the long put and long call define the maximum risk.\n\nThe trade profits most if the stock finishes between the two short strikes at expiration. In that case, all options can expire worthless and you keep the net credit. If price moves beyond either side, losses begin. The long wings cap the damage."
+          "body": "An iron condor combines a **bull put spread** below the market and a **bear call spread** above the market. You sell an OTM put spread and sell an OTM call spread at the same expiration. The short put and short call define the profit zone; the long put and long call define the maximum risk.\n\nThe trade profits most if the stock finishes between the two short strikes at expiration. In that case, all options can expire worthless and you keep the net credit. If price moves beyond either side, losses begin. The long wings cap the damage."
         },
         {
           "heading": "When it fits",
@@ -1323,7 +1323,7 @@
         },
         {
           "heading": "Risk and reward",
-          "body": "Maximum risk is generally close to the net debit paid if the structure is fully paid upfront, but real-world risk depends on assignment, early exercise, and how the short call is managed. Upside is not as simple as a normal debit spread because the long and short calls expire at different times.\n\nExample: if you pay $7 net for the diagonal, your initial capital at risk is about $700 per spread. If the stock stays below the short call and the short call decays, you may reduce your cost basis by selling calls over time. If the stock gaps far above the short strike, the short call may lose quickly even though the long call gains."
+          "body": "Maximum risk is generally close to the net debit paid if the structure is fully paid upfront, but real-world risk depends on assignment, early exercise, and how the short call is managed. Upside is not as simple as a normal **bull call spread** because the long and short calls expire at different times.\n\nExample: if you pay $7 net for the diagonal, your initial capital at risk is about $700 per spread. If the stock stays below the short call and the short call decays, you may reduce your cost basis by selling calls over time. If the stock gaps far above the short strike, the short call may lose quickly even though the long call gains."
         },
         {
           "heading": "Strike and expiration selection",
@@ -1513,20 +1513,28 @@
       "objectives": [
         "Bank gains without needing maximum theoretical profit.",
         "Understand why gamma, assignment, and liquidity risk increase near expiration.",
-        "Use planned profit targets for credit and debit spreads."
+        "Use planned profit targets for bull put spreads, bear call spreads, bull call spreads, and bear put spreads."
       ],
       "sections": [
         {
-          "heading": "Credit spreads",
-          "body": "Credit spreads make money as the spread loses value. If you sold a spread for $1.00, the maximum possible profit is $100 per spread. But you do not need to hold to expiration to be successful. Many traders close credit spreads after capturing 50-80% of max profit.\n\nExample: you sell a 95/90 put credit spread for $1.20. If the spread later trades for $0.30, you can buy it back and lock in $0.90, or $90 per spread before fees. That captures 75% of max profit and removes the remaining risk. Holding for the final $0.30 exposes you to gap risk, gamma risk, and possible assignment near expiration."
+          "heading": "Bull put spreads",
+          "body": "A **bull put spread** makes money as the spread loses value. If you sold the spread for $1.00, the maximum possible profit is $100 per spread. But you do not need to hold to expiration to be successful. Many traders close **bull put spreads** after capturing 50-80% of max profit.\n\nExample: you sell a 95/90 **bull put spread** for $1.20. If the spread later trades for $0.30, you can buy it back and lock in $0.90, or $90 per spread before fees. That captures 75% of max profit and removes the remaining risk. Holding for the final $0.30 exposes you to gap risk, gamma risk, and possible assignment near expiration."
+        },
+        {
+          "heading": "Bear call spreads",
+          "body": "A **bear call spread** follows the same closing logic as a **bull put spread**: you usually want the spread to lose value over time. If you sold a 105/110 **bear call spread** for $1.20, max profit is $120 per spread. Many traders close after capturing 50-80% of that credit instead of waiting for expiration.\n\nExample: the spread later trades for $0.35. Buying it back locks in $0.85, or $85 per spread before fees. That removes most of the remaining gap and gamma risk while the stock is still below the short call strike."
         },
         {
           "heading": "How to close",
-          "body": "Close the spread as a single combo order when possible. For a credit spread, closing usually means buying back the short option and selling the long option in one order. This controls the net debit you pay to exit. Closing one leg at a time can leave temporary naked exposure.\n\nExample: you sold the 95 put and bought the 90 put. To close, buy to close the 95 put and sell to close the 90 put as one vertical spread order. If you only buy back the short put and forget to sell the long put, you may leave unused value. If you only sell the long put first, you may temporarily hold a naked short put."
+          "body": "Close the spread as a single combo order when possible. For a **bull put spread** or **bear call spread**, closing usually means buying back the short option and selling the long option in one order. This controls the net debit you pay to exit. Closing one leg at a time can leave temporary naked exposure.\n\nExample: you sold the 95 put and bought the 90 put in a **bull put spread**. To close, buy to close the 95 put and sell to close the 90 put as one vertical spread order. If you only buy back the short put and forget to sell the long put, you may leave unused value. If you only sell the long put first, you may temporarily hold a naked short put."
         },
         {
-          "heading": "Debit spreads",
-          "body": "Debit spreads make money as the spread gains value. If you bought a 100/110 call spread for $4, the maximum value is $10 and max profit is $6. Many traders close when the spread reaches 70-90% of max value instead of waiting for expiration.\n\nExample: your $4 debit spread rises to $8.50. You could close for a $4.50 gain. Waiting for the final $1.50 of possible value may not be worth the risk of reversal, especially if expiration is near or the stock is close to the short strike."
+          "heading": "Bull call spreads",
+          "body": "A **bull call spread** makes money as the spread gains value. If you bought a 100/110 **bull call spread** for $4, the maximum value is $10 and max profit is $6. Many traders close when the spread reaches 70-90% of max value instead of waiting for expiration.\n\nExample: your $4 **bull call spread** rises to $8.50. You could close for a $4.50 gain. Waiting for the final $1.50 of possible value may not be worth the risk of reversal, especially if expiration is near or the stock is close to the short strike."
+        },
+        {
+          "heading": "Bear put spreads",
+          "body": "A **bear put spread** also makes money as the spread gains value. If you bought a 100/90 **bear put spread** for $3, max value is $10 and max profit is $7. The same 70-90% profit-taking rule often applies.\n\nExample: your $3 **bear put spread** rises to $7.50. Closing there captures most of the move without needing the stock to finish at or below $90 at expiration."
         },
         {
           "heading": "Why not wait for max profit",
@@ -1534,17 +1542,17 @@
         },
         {
           "heading": "Loss management",
-          "body": "Profit targets are only half of spread management. You also need a loss plan. Some traders close a credit spread if the loss reaches 1.5x or 2x the credit received, or if price breaks the technical level that justified the short strike. Others adjust only if the new risk/reward improves.\n\nExample: you sold a put spread below support. If support breaks on heavy volume, the original thesis is invalid. Holding only because max loss is defined can still be poor management. Defined risk means the loss is capped, not that you must take the full loss."
+          "body": "Profit targets are only half of spread management. You also need a loss plan. Some traders close a **bull put spread** or **bear call spread** if the loss reaches 1.5x or 2x the credit received, or if price breaks the technical level that justified the short strike. Others adjust only if the new risk/reward improves.\n\nExample: you sold a **bull put spread** below support. If support breaks on heavy volume, the original thesis is invalid. Holding only because max loss is defined can still be poor management. Defined risk means the loss is capped, not that you must take the full loss."
         }
       ],
       "key_points": [
-        "Credit spreads can be closed after capturing 50-80% of max profit.",
-        "Debit spreads can be closed after reaching most of max value.",
+        "Bull put spreads and bear call spreads can be closed after capturing 50-80% of max profit.",
+        "Bull call spreads and bear put spreads can be closed after reaching most of max value.",
         "Use combo orders to avoid leaving one naked leg.",
         "Near expiration, gamma and assignment risk can rise quickly.",
         "Close the entire spread; do not leave one naked leg."
       ],
-      "practice": "Choose one credit spread and one debit spread. Calculate max profit, 70% profit target, max loss, and the price level that invalidates the trade. Write the exact closing order for each spread."
+      "practice": "Choose one bull put spread and one bull call spread. Calculate max profit, 70% profit target, max loss, and the price level that invalidates the trade. Write the exact closing order for each spread."
     },
     {
       "id": "margin-awareness",
@@ -1562,7 +1570,7 @@
         },
         {
           "heading": "Spreads and diagonals",
-          "body": "Defined-risk spreads usually require less buying power because the long option caps the short option's risk. For example, a 100/105 call credit spread has a $5 width. If you collect $1 credit, max loss is about $4, or $400 per spread before fees. The broker can calculate the risk because the long call limits the damage.\n\nDiagonals are more complicated because the long and short options have different expirations. A long-dated call may reduce risk, but it may not fully cover the short call in the broker's margin model. Some brokers require additional buying power for the short leg, especially if assignment or expiration mismatch creates risk. Always preview margin before sending the order."
+          "body": "Defined-risk spreads usually require less buying power because the long option caps the short option's risk. For example, a 100/105 **bear call spread** has a $5 width. If you collect $1 credit, max loss is about $4, or $400 per spread before fees. The broker can calculate the risk because the long call limits the damage.\n\nDiagonals are more complicated because the long and short options have different expirations. A long-dated call may reduce risk, but it may not fully cover the short call in the broker's margin model. Some brokers require additional buying power for the short leg, especially if assignment or expiration mismatch creates risk. Always preview margin before sending the order."
         },
         {
           "heading": "Covered call",
@@ -1574,7 +1582,7 @@
         },
         {
           "heading": "Margin expansion risk",
-          "body": "Margin is not always static. During volatility spikes, brokers can increase requirements. A position that looks acceptable in calm markets can consume much more buying power during stress. This is especially important for short options, concentrated positions, and multi-leg trades near expiration.\n\nExample: you sell several credit spreads because each uses modest buying power. If volatility spikes and the spreads move against you, required buying power can increase while the account equity falls. This combination can create forced decisions. Keep extra liquidity instead of using every dollar of buying power."
+          "body": "Margin is not always static. During volatility spikes, brokers can increase requirements. A position that looks acceptable in calm markets can consume much more buying power during stress. This is especially important for short options, concentrated positions, and multi-leg trades near expiration.\n\nExample: you sell several **bull put spreads** or **bear call spreads** because each uses modest buying power. If volatility spikes and the spreads move against you, required buying power can increase while the account equity falls. This combination can create forced decisions. Keep extra liquidity instead of using every dollar of buying power."
         },
         {
           "heading": "Pre-entry margin checklist",
@@ -1589,7 +1597,7 @@
         "Keep liquidity buffer; do not use all buying power.",
         "Check margin impact before entry, not after a squeeze."
       ],
-      "practice": "Build three examples in the strategy table: naked short call, defined-risk credit spread, and covered call. For each, write max loss, assignment obligation, buying-power impact, and what could happen if the stock gaps 15% against you."
+      "practice": "Build three examples in the strategy table: naked short call, defined-risk bear call spread, and covered call. For each, write max loss, assignment obligation, buying-power impact, and what could happen if the stock gaps 15% against you."
     },
     {
       "id": "pre-trade-questions",
@@ -1603,15 +1611,15 @@
       "sections": [
         {
           "heading": "Checklist",
-          "body": "A pre-trade checklist turns an opinion into a plan. Before entering, answer these questions clearly:\n\n1. What is the market regime: risk-on, neutral, risk-off, or event-driven?\n2. What is the stock thesis, and what would prove it wrong?\n3. Is IV cheap, fair, expensive, or event-driven relative to this stock?\n4. What structure fits the thesis: stock, long option, debit spread, credit spread, hedge, or no trade?\n5. What is the max loss in dollars and as a percentage of the account?\n6. What happens if price does nothing?\n7. What happens if IV falls or rises sharply?\n8. Is liquidity acceptable: bid/ask spread, volume, open interest?\n9. What is the exit plan for profit, loss, and time decay?\n10. Does the expiration match the expected timeline?"
+          "body": "A pre-trade checklist turns an opinion into a plan. Before entering, answer these questions clearly:\n\n1. What is the market regime: risk-on, neutral, risk-off, or event-driven?\n2. What is the stock thesis, and what would prove it wrong?\n3. Is IV cheap, fair, expensive, or event-driven relative to this stock?\n4. What structure fits the thesis: stock, long option, bull call spread, bear put spread, bull put spread, bear call spread, hedge, or no trade?\n5. What is the max loss in dollars and as a percentage of the account?\n6. What happens if price does nothing?\n7. What happens if IV falls or rises sharply?\n8. Is liquidity acceptable: bid/ask spread, volume, open interest?\n9. What is the exit plan for profit, loss, and time decay?\n10. Does the expiration match the expected timeline?"
         },
         {
           "heading": "Example: long call checklist",
           "body": "Suppose you want to buy a call because a stock is breaking out. A good checklist answer might be: regime is risk-on, sector is leading, stock is above resistance, IV is low to medium, catalyst is within 30 days, and max loss is the premium paid. The invalidation is a close back below breakout support. If price does nothing for two weeks, exit because theta will accelerate.\n\nA weak checklist answer would be: 'I think it goes up.' That is not enough. You need direction, timing, IV view, max loss, and invalidation."
         },
         {
-          "heading": "Example: credit spread checklist",
-          "body": "Suppose you want to sell a put credit spread. A good checklist answer might be: market is neutral to bullish, stock is above support at $95, IV is elevated, sell the 95/90 put spread for $1.20, max loss is $3.80 per share or $380 per spread, break-even is $93.80, and you will close at 70% of max profit or if support breaks.\n\nThe key is that the short strike should be placed for a reason. Selling a spread only because the credit looks attractive is not enough."
+          "heading": "Example: bull put spread checklist",
+          "body": "Suppose you want to sell a **bull put spread**. A good checklist answer might be: market is neutral to bullish, stock is above support at $95, IV is elevated, sell the 95/90 **bull put spread** for $1.20, max loss is $3.80 per share or $380 per spread, break-even is $93.80, and you will close at 70% of max profit or if support breaks.\n\nThe key is that the short strike should be placed for a reason. Selling a spread only because the credit looks attractive is not enough."
         },
         {
           "heading": "Position size question",
@@ -1629,7 +1637,7 @@
         "Position size must be based on total dollar risk.",
         "If you cannot answer clearly, wait."
       ],
-      "practice": "Use the Pre-trade checklist page before every new options structure. Write answers for one long call, one credit spread, and one stock-plus-option structure. If any answer is vague, revise the trade or skip it."
+      "practice": "Use the Pre-trade checklist page before every new options structure. Write answers for one long call, one bull put spread, and one stock-plus-option structure. If any answer is vague, revise the trade or skip it."
     }
   ],
   "strategy_playbook": [
@@ -1828,7 +1836,7 @@
         {
           "question": "Is IV cheap, fair, expensive, or event-driven for this symbol?",
           "why_it_matters": "IV affects both structure choice and required move. Expensive IV hurts buyers. Cheap IV offers less edge for sellers unless range behavior is strong.",
-          "example": "Example: IV rank 80 before earnings. Buying a straddle may face IV crush. Selling a wide iron condor may collect rich premium but has gap risk. IV rank 25 during a clean breakout may favor long calls or debit spreads.",
+          "example": "Example: IV rank 80 before earnings. Buying a straddle may face IV crush. Selling a wide iron condor may collect rich premium but has gap risk. IV rank 25 during a clean breakout may favor long calls or bull call spreads.",
           "red_flag": "If IV is expensive and your plan is to buy ATM options without a strong catalyst, reconsider."
         },
         {
@@ -1846,7 +1854,7 @@
         {
           "question": "What happens if the stock does not move?",
           "why_it_matters": "Many option losses come from no movement, not from being wrong on direction. Theta and IV changes matter.",
-          "example": "Example: buy a 45 DTE call for $4. If stock stays near unchanged for three weeks, the call may fall to $2 even without a bearish move. A covered call or credit spread may have behaved better in that environment.",
+          "example": "Example: buy a 45 DTE call for $4. If stock stays near unchanged for three weeks, the call may fall to $2 even without a bearish move. A covered call or bull put spread may have behaved better in that environment.",
           "red_flag": "If the trade only works with a fast move and you have no catalyst, avoid long premium."
         },
         {

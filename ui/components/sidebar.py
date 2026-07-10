@@ -33,6 +33,8 @@ def _render_sidebar_brand() -> None:
 
 def init_session_state() -> None:
     """Initialize navigation and ticker session state."""
+    _apply_education_nav_pending()
+
     defaults = {
         "main_section": "Home Dashboard",
         "submenu": None,
@@ -180,6 +182,21 @@ def _render_symbol_selector(available_tickers: list[str], main_section: str) -> 
             )
             st.session_state.selected_ticker = st.session_state.sidebar_ticker
 
-    st.caption(f"Active: **{st.session_state.selected_ticker}**")
+        st.caption(f"Active: **{st.session_state.selected_ticker}**")
     if main_section != "Home Dashboard" and not custom_symbol:
         st.caption("Suggested symbols are available on the Home Dashboard.")
+
+
+def _apply_education_nav_pending() -> None:
+    """Apply deferred Education submenu navigation before sidebar widgets mount."""
+    nav_pending = st.session_state.pop("education_nav_pending", None)
+    if not isinstance(nav_pending, dict):
+        return
+
+    st.session_state.main_section = "Education"
+    st.session_state.main_nav_radio = "Education"
+    submenu = nav_pending.get("submenu")
+    if submenu and submenu in SUBMENUS.get("Education", []):
+        submenu_key = _submenu_widget_key("Education")
+        st.session_state[submenu_key] = submenu
+        st.session_state.submenu = submenu

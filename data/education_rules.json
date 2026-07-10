@@ -71,7 +71,7 @@
       "title": "Neutral markets favor structured income",
       "market_regime": "Sideways",
       "instrument": "Stocks and Options",
-      "lesson": "When price respects support and resistance, trend is unclear, and IV is elevated, defined-risk premium selling can work: covered calls, cash-secured puts, credit spreads, iron condors, and some diagonals. The edge is time decay and range behavior, not a large directional move.",
+      "lesson": "When price respects support and resistance, trend is unclear, and IV is elevated, defined-risk premium selling can work: covered calls, cash-secured puts, bull put spreads, bear call spreads, iron condors, and some diagonals. The edge is time decay and range behavior, not a large directional move.",
       "example": "Example: stock oscillates between $92 and $108 for weeks with IV at the upper end of its range. An iron condor with short strikes outside the range may collect $2.00 credit with $3.00 max loss. A long straddle bought for $8 needs a move beyond $92 or $108 just to break even at expiration.",
       "action": "Place short strikes beyond real support/resistance. Size for gap risk outside the range.",
       "avoid": "Selling undefined-risk premium because credit looks attractive.",
@@ -90,11 +90,11 @@
     },
     {
       "id": "close-winners-early",
-      "title": "Credit spreads do not need max profit",
+      "title": "Bull put and bear call spreads do not need max profit",
       "market_regime": "Sideways",
       "instrument": "Options",
-      "lesson": "Credit spreads and iron condors often reach most of their profit well before expiration. Closing at 50-80% of max profit reduces gamma risk, assignment complications, and the chance of a late reversal erasing gains.",
-      "example": "Example: sell a put credit spread for $2.00 credit. When it can be closed for a $0.50 debit, you kept $1.50, or 75% of max profit. Waiting for the last $0.50 can expose you to a reversal that turns a winner into a loser.",
+      "lesson": "Bull put spreads and bear call spreads often reach most of their profit well before expiration. Closing at 50-80% of max profit reduces gamma risk, assignment complications, and the chance of a late reversal erasing gains.",
+      "example": "Example: sell a bull put spread for $2.00 credit. When it can be closed for a $0.50 debit, you kept $1.50, or 75% of max profit. Waiting for the last $0.50 can expose you to a reversal that turns a winner into a loser.",
       "action": "Set a profit-taking rule at entry. Use combo orders to close both legs together.",
       "avoid": "Leaving one leg open after closing the other.",
       "risk_note": "Near expiration, short options become more sensitive to small price moves."

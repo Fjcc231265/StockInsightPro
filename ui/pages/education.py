@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import html
+import json
 import math
+import re
 
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from services.education_service import (
@@ -24,12 +27,366 @@ from services.options_data_service import get_options_chain
 from services.trading_tutor_service import build_trading_tutor_report, get_tutor_checklists
 from ui.components.page_router import render_submenu_page
 from ui.education_lesson_visuals import render_lesson_visuals, render_strategy_playbook_visuals, render_visual_keys
+from ui.regime_structure_guides import (
+    LESSON_TITLES,
+    REGIME_SECTION_STRUCTURES,
+    REGIME_STRUCTURE_GUIDES,
+)
 from utils.constants import COLORS
+
+_STRATEGY_PAYOFF_TEMPLATES = [
+    "Custom",
+    "Covered call",
+    "Protective put",
+    "Collar",
+    "Bull call spread",
+    "Bear put spread",
+    "Long straddle",
+    "Long call butterfly",
+    "Iron butterfly",
+]
+
+
+def _apply_education_navigation_pending() -> None:
+    """Apply one-shot navigation requests (simulator presets, lesson focus)."""
+    pending_template = st.session_state.pop("education_pending_strategy_template", None)
+    if pending_template in _STRATEGY_PAYOFF_TEMPLATES:
+        st.session_state.strategy_payoff_preset = pending_template
+
+    pending_defaults = st.session_state.pop("education_pending_option_defaults", None)
+    if isinstance(pending_defaults, dict):
+        current = dict(st.session_state.get("education_single_option_defaults", {}))
+        current.update(pending_defaults)
+        st.session_state.education_single_option_defaults = current
+        st.session_state.education_option_defaults_banner = (
+            "Simulator pre-filled from **Market regime framework** — adjust strikes and premium to your symbol."
+        )
+
+    if "strategy_payoff_preset" not in st.session_state:
+        st.session_state.strategy_payoff_preset = "Custom"
+
+
+def _education_anchor_slug(text: str) -> str:
+    """Build a stable HTML id fragment from lesson or section text."""
+    return "".join(ch if ch.isalnum() else "-" for ch in str(text).lower()).strip("-")
+
+
+def _education_lesson_anchor_id(lesson_id: str, section_heading: str | None = None) -> str:
+    """Return the scroll anchor id for a lesson or a specific section within it."""
+    if section_heading:
+        return f"edu-lesson-{lesson_id}-{_education_anchor_slug(section_heading)}"
+    return f"edu-lesson-{lesson_id}"
+
+
+def _education_sim_anchor_id(simulator_name: str) -> str:
+    """Return the scroll anchor id for an Education simulator submenu."""
+    mapping = {
+        "Stock P&L simulator": "edu-sim-stock-pnl",
+        "Options P&L simulator": "edu-sim-options-pnl",
+        "Strategy payoff lab": "edu-sim-strategy-payoff",
+        "Market scenario lab": "edu-sim-market-scenario",
+    }
+    return mapping.get(simulator_name, "edu-sim-top")
+
+
+def _render_education_anchor(anchor_id: str) -> None:
+    """Insert an invisible scroll target at the top of a lesson expander."""
+    safe_id = html.escape(anchor_id)
+    st.markdown(
+        (
+            f'<div id="{safe_id}" data-sip-education-anchor="{safe_id}" '
+            f'class="sip-education-anchor" aria-hidden="true"></div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_education_section_heading(heading: str, anchor_id: str | None = None) -> None:
+    """Render a section heading; attach the scroll anchor when this section is the target."""
+    text = html.escape(str(heading))
+    if anchor_id:
+        safe_id = html.escape(anchor_id)
+        st.markdown(
+            (
+                f'<h4 id="{safe_id}" data-sip-education-anchor="{safe_id}" '
+                f'class="sip-education-section-title">{text}</h4>'
+            ),
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(f"**{heading}**")
+
+
+def _render_education_simulator_title(simulator_name: str, title: str) -> str:
+    """Render the simulator page title with a scroll anchor on the heading itself."""
+    anchor_id = _education_sim_anchor_id(simulator_name)
+    safe_id = html.escape(anchor_id)
+    safe_title = html.escape(title)
+    st.markdown(
+        (
+            f'<h3 id="{safe_id}" data-sip-education-anchor="{safe_id}" '
+            f'class="sip-education-page-title">{safe_title}</h3>'
+        ),
+        unsafe_allow_html=True,
+    )
+    return anchor_id
+
+
+def _finish_education_scroll(anchor_id: str) -> None:
+    """Scroll once the destination page has fully rendered."""
+    if st.session_state.get("education_scroll_target") != anchor_id:
+        return
+    st.session_state.pop("education_scroll_target", None)
+    _emit_education_scroll_script(anchor_id)
+
+
+def _emit_education_scroll_script(anchor_id: str) -> None:
+    """Scroll the main Streamlit pane to an Education anchor."""
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const targetId = {json.dumps(str(anchor_id))};
+            const win = window.parent;
+            const doc = win.document;
+
+            function hideFrame() {{
+                const frame = window.frameElement;
+                if (frame) {{
+                    frame.style.cssText =
+                        "position:absolute;width:0;height:0;opacity:0;pointer-events:none;border:0;";
+                }}
+            }}
+
+            function findAnchor() {{
+                return (
+                    doc.querySelector('[data-sip-education-anchor="' + targetId + '"]') ||
+                    doc.getElementById(targetId)
+                );
+            }}
+
+            function headerOffset() {{
+                const appHeader = doc.querySelector('[data-testid="stHeader"]');
+                const pageHeader = doc.querySelector(".sip-header");
+                let offset = 12;
+                if (appHeader) offset += appHeader.getBoundingClientRect().height;
+                if (pageHeader) offset += pageHeader.getBoundingClientRect().height;
+                return offset;
+            }}
+
+            function scrollContainers() {{
+                const seen = new Set();
+                const nodes = [
+                    doc.querySelector("section.main"),
+                    doc.querySelector('[data-testid="stMain"]'),
+                    doc.querySelector('[data-testid="stAppViewContainer"]'),
+                    doc.scrollingElement,
+                    doc.documentElement,
+                    doc.body,
+                ];
+                return nodes.filter((node) => node && !seen.has(node) && seen.add(node));
+            }}
+
+            function applyScroll() {{
+                const el = findAnchor();
+                if (!el) return false;
+
+                const details = el.closest("details");
+                if (details && !details.open) details.open = true;
+
+                const offset = headerOffset();
+                const elTop = el.getBoundingClientRect().top;
+
+                scrollContainers().forEach((container) => {{
+                    if (container === doc.documentElement || container === doc.body) {{
+                        return;
+                    }}
+                    const parentTop = container.getBoundingClientRect().top;
+                    const next = container.scrollTop + (elTop - parentTop) - offset;
+                    container.scrollTop = Math.max(0, next);
+                }});
+
+                win.scrollTo(0, Math.max(0, win.scrollY + elTop - offset));
+                hideFrame();
+                return true;
+            }}
+
+            let attempts = 0;
+            function tick() {{
+                if (applyScroll() || attempts >= 40) return;
+                attempts += 1;
+                win.requestAnimationFrame(tick);
+            }}
+
+            tick();
+            [150, 350, 700, 1200, 2000].forEach((delay) => {{
+                setTimeout(applyScroll, delay);
+            }});
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def _queue_education_navigation(
+    *,
+    submenu: str,
+    module_focus: str | None = None,
+    lesson_focus: str | None = None,
+    lesson_section: str | None = None,
+    strategy_template: str | None = None,
+    option_defaults: dict | None = None,
+    scroll_target: str | None = None,
+) -> None:
+    """Jump to an Education submenu and optionally pre-fill simulators or lesson library."""
+    st.session_state.education_nav_pending = {"submenu": submenu}
+    if module_focus and lesson_focus:
+        focus: dict[str, str] = {
+            "module": module_focus,
+            "lesson_id": lesson_focus,
+        }
+        if lesson_section:
+            focus["section_heading"] = lesson_section
+        st.session_state.education_lesson_library_focus = focus
+    if strategy_template:
+        st.session_state.education_pending_strategy_template = strategy_template
+        st.session_state.education_strategy_template_banner = strategy_template
+    if option_defaults:
+        st.session_state.education_pending_option_defaults = option_defaults
+    if scroll_target:
+        st.session_state.education_scroll_target = scroll_target
+    st.rerun()
+
+
+def _regime_guide_widget_key(
+    button_kind: str,
+    lesson_id: str,
+    section_heading: str,
+    structure_id: str,
+) -> str:
+    """Build a unique Streamlit widget key for regime structure guide buttons."""
+    section_slug = "".join(
+        ch if ch.isalnum() else "_" for ch in str(section_heading).lower()
+    ).strip("_")
+    return f"regime_{button_kind}_{lesson_id}_{section_slug}_{structure_id}"
+
+
+def _render_regime_structure_guides(lesson_id: str, section_heading: str) -> None:
+    """Render linked structures with numeric examples and simulator shortcuts."""
+    structure_ids = REGIME_SECTION_STRUCTURES.get((lesson_id, section_heading), [])
+    if not structure_ids:
+        return
+
+    st.markdown("**Structures that often fit this regime**")
+    for structure_id in structure_ids:
+        guide = REGIME_STRUCTURE_GUIDES.get(structure_id)
+        if not guide:
+            continue
+        with st.container(border=True):
+            st.markdown(f"##### {guide['name']}")
+            _render_regime_markdown(guide["regime_fit"], caption=True)
+            st.markdown(
+                f'<div class="sip-lesson-body"><strong>Numeric example:</strong> '
+                f"{_markdown_with_regime_products(guide['numeric_example'])}</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<div class="sip-lesson-body"><strong>Try in simulator:</strong> '
+                f"{_markdown_with_regime_products(guide['simulator_note'])}</div>",
+                unsafe_allow_html=True,
+            )
+
+            link_col1, link_col2, link_col3 = st.columns(3)
+            lesson_ref = guide.get("lesson_id")
+            if lesson_ref:
+                lesson_title = LESSON_TITLES.get(lesson_ref, lesson_ref)
+                with link_col1:
+                    if st.button(
+                        f"Lesson: {lesson_title}",
+                        key=_regime_guide_widget_key(
+                            "lesson", lesson_id, section_heading, structure_id
+                        ),
+                        use_container_width=True,
+                    ):
+                        lesson_module = _lesson_module_for_id(lesson_ref)
+                        lesson_section = guide.get("lesson_section")
+                        _queue_education_navigation(
+                            submenu="Lesson library",
+                            module_focus=lesson_module,
+                            lesson_focus=lesson_ref,
+                            lesson_section=str(lesson_section) if lesson_section else None,
+                            scroll_target=_education_lesson_anchor_id(
+                                lesson_ref,
+                                str(lesson_section) if lesson_section else None,
+                            ),
+                        )
+            with link_col2:
+                if st.button(
+                    f"Open {guide['simulator']}",
+                    key=_regime_guide_widget_key(
+                        "sim", lesson_id, section_heading, structure_id
+                    ),
+                    use_container_width=True,
+                ):
+                    _queue_education_navigation(
+                        submenu=str(guide["simulator"]),
+                        strategy_template=guide.get("template"),
+                        option_defaults=guide.get("option_defaults"),
+                        scroll_target=_education_sim_anchor_id(str(guide["simulator"])),
+                    )
+            playbook_id = guide.get("playbook_id")
+            if playbook_id:
+                with link_col3:
+                    if st.button(
+                        "Trading tutor",
+                        key=_regime_guide_widget_key(
+                            "tutor", lesson_id, section_heading, structure_id
+                        ),
+                        use_container_width=True,
+                    ):
+                        _queue_education_navigation(submenu="Trading tutor")
+
+
+def _lesson_module_for_id(lesson_id: str) -> str:
+    """Return curriculum module id for a lesson."""
+    lesson = get_lesson(lesson_id)
+    if lesson and lesson.get("module"):
+        return str(lesson["module"])
+    return "core-strategies"
 
 
 def _escape_markdown_math(text: object) -> str:
     """Keep literal dollar amounts from being interpreted as inline LaTeX."""
     return str(text).replace("$", r"\$")
+
+
+_REGIME_PRODUCT_PATTERN = re.compile(r"\*\*(.+?)\*\*")
+
+
+def _markdown_with_regime_products(text: object) -> str:
+    """Turn **bold** markers into dark-blue product highlights for regime lessons."""
+    raw = _escape_markdown_math(text)
+    chunks: list[str] = []
+    last = 0
+    for match in _REGIME_PRODUCT_PATTERN.finditer(raw):
+        chunks.append(html.escape(raw[last : match.start()]))
+        chunks.append(
+            f'<span class="sip-regime-product">{html.escape(match.group(1))}</span>'
+        )
+        last = match.end()
+    chunks.append(html.escape(raw[last:]))
+    return "".join(chunks).replace("\n\n", "<br><br>").replace("\n", "<br>")
+
+
+def _render_regime_markdown(text: object, *, caption: bool = False) -> None:
+    """Render regime lesson text with highlighted product names."""
+    css_class = "sip-regime-caption" if caption else "sip-lesson-body"
+    st.markdown(
+        f'<div class="{css_class}">{_markdown_with_regime_products(text)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_tutor_suggestion(content: str) -> None:
@@ -162,6 +519,7 @@ _STRATEGY_TEMPLATE_HINTS: dict[str, str] = {
 
 def render(submenu: str) -> None:
     """Route education submenu."""
+    _apply_education_navigation_pending()
     _render_simulator_input_highlight_style()
     handlers = {
         "Learning roadmap": _learning_roadmap,
@@ -311,12 +669,21 @@ def _lesson_library() -> None:
         st.warning("No curriculum modules loaded.")
         return
 
+    focus = st.session_state.pop("education_lesson_library_focus", None)
+    focus_module = str(focus.get("module", "")) if isinstance(focus, dict) else ""
+    focus_lesson = str(focus.get("lesson_id", "")) if isinstance(focus, dict) else ""
+    focus_section = str(focus.get("section_heading", "")) if isinstance(focus, dict) else ""
+
     module_options = {"all": "All modules in roadmap order"}
     module_options.update({str(m["id"]): f"{m.get('order', '')}. {m.get('title', m['id'])}" for m in modules})
+    default_module_index = 0
+    if focus_module and focus_module in module_options:
+        default_module_index = list(module_options.keys()).index(focus_module)
     selected_id = st.selectbox(
         "Module view",
         options=list(module_options.keys()),
         format_func=lambda key: module_options[key],
+        index=default_module_index,
     )
     if selected_id == "all":
         total_lessons = sum(len(get_lessons_for_module(str(module["id"]))) for module in modules)
@@ -329,20 +696,38 @@ def _lesson_library() -> None:
             st.markdown(f"#### {module.get('order', '')}. {module.get('title', module_id)}")
             st.caption(module.get("summary", ""))
             for lesson in module_lessons:
-                _render_lesson_card(lesson, expanded=False)
+                expand = bool(focus_lesson) and str(lesson.get("id")) == focus_lesson
+                _render_lesson_card(
+                    lesson,
+                    expanded=expand,
+                    focus_section=focus_section if expand else "",
+                )
             st.divider()
     else:
         lessons = get_lessons_for_module(selected_id)
         st.caption(f"{len(lessons)} lesson(s) in **{get_module_title(selected_id)}**.")
         for lesson in lessons:
-            _render_lesson_card(lesson, expanded=False)
+            expand = bool(focus_lesson) and str(lesson.get("id")) == focus_lesson
+            _render_lesson_card(
+                lesson,
+                expanded=expand,
+                focus_section=focus_section if expand else "",
+            )
 
 
-def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
+def _render_lesson_card(lesson: dict, expanded: bool = False, focus_section: str = "") -> None:
     """Render one lesson as an expander."""
     title = lesson.get("title", "Lesson")
-    with st.expander(title, expanded=expanded):
+    with st.expander(title, expanded=bool(expanded)):
         lesson_id = str(lesson.get("id", ""))
+        lesson_anchor_id = _education_lesson_anchor_id(lesson_id)
+        section_anchor_id = (
+            _education_lesson_anchor_id(lesson_id, focus_section)
+            if expanded and focus_section
+            else None
+        )
+        if expanded and not focus_section:
+            _render_education_anchor(lesson_anchor_id)
         intro_heading = "Why long-term stock-market investing can work"
         if lesson_id == "market-mindset":
             for section in lesson.get("sections", []):
@@ -381,10 +766,18 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
             body = section.get("body", "")
             if lesson_id == "market-mindset" and heading == intro_heading:
                 continue
+            section_anchor = None
+            if expanded and focus_section and str(heading) == focus_section:
+                section_anchor = _education_lesson_anchor_id(lesson_id, focus_section)
             if heading:
-                st.markdown(f"**{heading}**")
+                _render_education_section_heading(str(heading), section_anchor)
             if body:
-                st.markdown(_escape_markdown_math(body))
+                if str(lesson.get("module")) == "regime-framework":
+                    _render_regime_markdown(body)
+                else:
+                    st.markdown(_escape_markdown_math(body))
+            if str(lesson.get("module")) == "regime-framework" and heading:
+                _render_regime_structure_guides(lesson_id, str(heading))
             if lesson_id == "market-mindset" and heading == "What moves the market":
                 render_visual_keys(
                     ["market_drivers"],
@@ -421,6 +814,9 @@ def _render_lesson_card(lesson: dict, expanded: bool = False) -> None:
         simulator = lesson.get("related_simulator")
         if simulator:
             st.caption(f"Related tool: **{simulator}**")
+
+        if expanded:
+            _finish_education_scroll(section_anchor_id or lesson_anchor_id)
 
 
 def _trading_tutor() -> None:
@@ -940,7 +1336,7 @@ def _market_regime_guide() -> None:
 **Examples**
 
 - **Risk-on:** indexes trend higher, VIX falls from 20 to 16, breadth is positive, and a stock breaks above resistance. Next step: compare stock, long call, or bull call spread in Strategy playbook.
-- **Neutral:** stock respects $92 support and $108 resistance, IV is elevated, and there is no strong catalyst. Next step: compare covered call, cash-secured put, credit spread, or iron condor.
+- **Neutral:** stock respects $92 support and $108 resistance, IV is elevated, and there is no strong catalyst. Next step: compare covered call, cash-secured put, bull put spread, bear call spread, or iron condor.
 - **Risk-off:** VIX rises, support breaks, and rallies fail. Next step: reduce size, use protective puts or collars on existing shares, or defined-risk bearish structures.
 - **Event-driven:** earnings in one week and IV is rising. Next step: compare implied move vs your thesis before buying or selling premium.
 """
@@ -955,7 +1351,7 @@ def _market_regime_guide() -> None:
 | Environment | What you usually see | Often works | Often avoid | Next page |
 |-------------|----------------------|-------------|-------------|-----------|
 | Risk-on | VIX falling, breakouts hold, growth leads | Stock, long calls, bull call spreads | Tight covered calls that cap strong trends | Strategy playbook → Bullish / risk-on |
-| Neutral + elevated IV | Range, failed breakouts, rich premium | Covered calls, CSPs, credit spreads, iron condors | Buying expensive ATM options without catalyst | Strategy playbook → Mildly bullish / income or Neutral |
+| Neutral + elevated IV | Range, failed breakouts, rich premium | Covered calls, CSPs, bull put spreads, bear call spreads, iron condors | Buying expensive ATM options without catalyst | Strategy playbook → Mildly bullish / income or Neutral |
 | Risk-off | VIX rising, breadth weak, support breaks | Cash, puts, collars, smaller size | Oversized directional bets | Strategy playbook → Bearish / Defensive |
 | High volatility / event | IV spikes, earnings, macro releases | Hedging, defined-risk spreads, careful premium selling | Undefined-risk short options, illiquid strikes | Rules playbook + Pre-trade checklist |
 """
@@ -1078,7 +1474,7 @@ def _rules_playbook() -> None:
 
 def _stock_pnl_simulator() -> None:
     """Render long/short stock P&L simulator."""
-    st.markdown("### Stock P&L simulator")
+    anchor_id = _render_education_simulator_title("Stock P&L simulator", "Stock P&L simulator")
     _render_editable_assumption_note()
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -1127,11 +1523,12 @@ def _stock_pnl_simulator() -> None:
         key="stock_pnl_selected_scenario",
     )
     st.caption(f"Round-trip commission estimate included in P&L: **\\${round_trip_commission:,.2f}**.")
+    _finish_education_scroll(anchor_id)
 
 
 def _options_pnl_simulator() -> None:
     """Render Greek-aware single-leg options P&L simulator."""
-    st.markdown("### Options P&L simulator")
+    anchor_id = _render_education_simulator_title("Options P&L simulator", "Options P&L simulator")
     _render_editable_assumption_note()
     st.caption(
         "Simulate a single option using editable market inputs, model-based Greeks, implied volatility, "
@@ -1139,6 +1536,9 @@ def _options_pnl_simulator() -> None:
     )
 
     ticker = st.session_state.selected_ticker
+    banner = st.session_state.pop("education_option_defaults_banner", None)
+    if banner:
+        st.info(banner)
     _render_chain_defaults_loader(ticker, "single_option")
     defaults = st.session_state.get("education_single_option_defaults", {})
     reference_chain = st.session_state.get("education_single_option_chain_full")
@@ -1151,7 +1551,12 @@ def _options_pnl_simulator() -> None:
             horizontal=True,
             index=0 if defaults.get("option_type", "Call") == "Call" else 1,
         )
-        action = st.radio("Action", ["Buy", "Sell"], horizontal=True)
+        action = st.radio(
+            "Action",
+            ["Buy", "Sell"],
+            horizontal=True,
+            index=0 if str(defaults.get("action", "Buy")).strip().lower() != "sell" else 1,
+        )
     reference_defaults = _render_single_option_reference_strike_selector(
         reference_chain,
         option_type,
@@ -1352,11 +1757,12 @@ def _options_pnl_simulator() -> None:
             f"can show an immediate gross P&L of about **{_format_signed_money(immediate_pnl)}** even before the stock moves."
         )
     _render_option_variable_explanations()
+    _finish_education_scroll(anchor_id)
 
 
 def _strategy_payoff_lab() -> None:
     """Render combined stock and options payoff simulator for multi-leg strategies."""
-    st.markdown("### Strategy payoff lab")
+    anchor_id = _render_education_simulator_title("Strategy payoff lab", "Strategy payoff lab")
     _render_editable_assumption_note()
     st.caption(
         "Preview net P&L for stocks, options, and combined positions. "
@@ -1367,20 +1773,17 @@ def _strategy_payoff_lab() -> None:
     ticker = st.session_state.selected_ticker
     _render_chain_defaults_loader(ticker, "strategy")
 
+    pending_template = st.session_state.pop("education_strategy_template_banner", None)
+    if pending_template:
+        st.info(
+            f"Strategy template set to **{pending_template}** from **Market regime framework**. "
+            "Adjust strikes and size below."
+        )
+
     preset = st.selectbox(
         "Strategy template",
-        [
-            "Custom",
-            "Covered call",
-            "Protective put",
-            "Collar",
-            "Bull call spread",
-            "Bear put spread",
-            "Long straddle",
-            "Long call butterfly",
-            "Iron butterfly",
-        ],
-        index=0,
+        _STRATEGY_PAYOFF_TEMPLATES,
+        key="strategy_payoff_preset",
         help=_SIMULATOR_TOOLKIT["strategy_template"],
     )
     st.caption(_STRATEGY_TEMPLATE_HINTS.get(preset, ""))
@@ -1633,11 +2036,12 @@ Strike, Premium, and IV %. Use the + row control to add more stock or option leg
     with st.expander("How to read this strategy", expanded=True):
         st.markdown(_strategy_teaching_note(preset))
         _render_option_variable_explanations()
+    _finish_education_scroll(anchor_id)
 
 
 def _market_scenario_lab() -> None:
     """Render rule-driven scenario explanations."""
-    st.markdown("### Market scenario lab")
+    anchor_id = _render_education_simulator_title("Market scenario lab", "Market scenario lab")
     regime = st.selectbox("Market regime", ["Bullish", "Bearish", "Sideways", "High volatility"])
     instrument = st.selectbox("Instrument focus", ["Stocks", "Options", "Stocks and Options"])
     matching_rules = filter_rules(regime, instrument)
@@ -1645,6 +2049,7 @@ def _market_scenario_lab() -> None:
 
     if not matching_rules:
         st.info("No matching local rule yet. Add one to `data/education_rules.json` to enrich this scenario.")
+        _finish_education_scroll(anchor_id)
         return
 
     for rule in matching_rules:
@@ -1652,6 +2057,7 @@ def _market_scenario_lab() -> None:
         st.write(rule.get("lesson", ""))
         st.caption(rule.get("example", ""))
         st.warning(rule.get("risk_note", "Risk management is required."))
+    _finish_education_scroll(anchor_id)
 
 
 def _price_range(anchor_price: float) -> list[float]:

@@ -175,14 +175,14 @@ _VISUAL_CAPTIONS: dict[str, str] = {
     "protective_put": "Stock plus long put: floor below the put strike (minus premium paid).",
     "covered_call": "Long stock plus short call: income from premium, upside capped at the call strike.",
     "cash_secured_put": "Short put: profit if stock stays above strike; assignment risk if stock falls far below.",
-    "credit_spread": "Vertical credit spread: max gain = credit received; max loss = width − credit.",
+    "credit_spread": "Bear call spread: max gain = credit received; max loss = width − credit.",
     "iron_condor": "Iron condor: profits when price stays between the short strikes at expiration.",
     "long_straddle": "Long straddle: needs a large move in either direction to overcome double premium.",
     "collar": "Collar: long stock, long put (floor), short call (ceiling).",
     "diagonal_concept": "Diagonal: long dated call + short nearer call to harvest time decay.",
     "bull_call_spread": "Bull call spread: cheaper than a naked call; upside capped at short strike.",
     "roll_covered_call": "Rolling the short call up/out can recover upside when the stock rallies.",
-    "credit_spread_profit_zone": "Many traders close credit spreads before expiration after capturing most of max profit.",
+    "credit_spread_profit_zone": "Many traders close bull put spreads and bear call spreads before expiration after capturing most of max profit.",
     "margin_comparison": "Defined-risk spreads usually use less buying power than naked short options.",
     "bear_put_spread": "Bear put spread: defined-risk bearish trade with profit capped at spread width minus debit.",
     "market_drivers": "Conceptual chart only—the bar heights are not real measured percentages. They show that several forces can influence price at once.",
@@ -1440,7 +1440,7 @@ def _rates_dividend_effect() -> None:
 @_register("regime_matrix")
 def _regime_matrix() -> None:
     rows = [
-        ["Risk-on", "VIX falling, breadth strong, growth leads", "Long stock, call spreads, long calls", "Capping upside too early"],
+        ["Risk-on", "VIX falling, breadth strong, growth leads", "Long stock, bull call spreads, long calls", "Capping upside too early"],
         ["Neutral / range", "Chop, rotations, failed breakouts", "Covered calls, calendars, iron condors", "Buying short-dated premium without catalyst"],
         ["Risk-off", "VIX rising, support breaks, correlations rise", "Cash, collars, protective puts, smaller size", "Oversized directional bets"],
         ["Event / high IV", "Premium rich before known catalyst", "Defined-risk credits or event debit trades", "Ignoring IV crush and expected move"],
@@ -1477,7 +1477,7 @@ def _regime_matrix() -> None:
     _plotly_chart(fig)
     st.markdown(
         "- **Start with evidence:** trend, VIX, breadth, leadership, credit stress, and catalyst timing.\n"
-        "- **Then choose structure:** the same bullish thesis may call for stock in risk-on, a debit spread in moderate IV, or no trade in risk-off.\n"
+        "- **Then choose structure:** the same bullish thesis may call for stock in risk-on, a bull call spread in moderate IV, or no trade in risk-off.\n"
         "- **Avoid one-strategy thinking:** regime decides whether you want direction, income, hedge, or patience."
     )
 
@@ -1674,7 +1674,7 @@ Investors are willing to buy risk assets. Upside moves tend to hold, dips are of
 The market is chopping between support and resistance without a clean directional edge.
 
 - **Typical evidence:** repeated failed breakouts; indexes flat over several sessions; rotations between sectors; IV may be elevated even without a strong trend
-- **Often fits:** covered calls, cash-secured puts, credit spreads, iron condors, calendars
+- **Often fits:** covered calls, cash-secured puts, bull put spreads, bear call spreads, iron condors, calendars
 - **Often avoid:** buying short-dated ATM options without a catalyst (theta works against you)
 
 #### Risk-off
@@ -1708,7 +1708,7 @@ A known catalyst (earnings, Fed, macro release) may create a large move, and opt
 | IV Rank (illustrative) | Label | What it usually means | Buyer implication | Seller implication |
 |------------------------|-------|----------------------|-------------------|-------------------|
 | **Below ~35** | Cheap / low | Premium is low vs recent history | Long options cost less, but you still need a move | Less credit for sellers; need strong range thesis |
-| **~35–60** | Fair / medium | Normal premium for this name | Debit spreads and stock both reasonable | Credit structures need clear range or willingness to own |
+| **~35–60** | Fair / medium | Normal premium for this name | Bull call spreads and stock both reasonable | Bull put spreads and bear call spreads need clear range or willingness to own |
 | **~60–80** | Elevated / expensive | Premium is rich | Prefer spreads over naked long options | Credit may pay well, but gap risk rises |
 | **Above ~80** | Extreme / event-like | Market prices a large move | Buying premium is costly; IV crush risk after event | Selling premium is risky unless defined-risk and sized small |
 
@@ -1729,7 +1729,7 @@ The structure is *how* you express the idea after regime and IV are clear.
 | Your read | IV cheap / fair | IV elevated / expensive |
 |-----------|-----------------|-------------------------|
 | **Risk-on bullish** | Stock, long call, bull call spread | Bull call spread preferred over naked call |
-| **Neutral / range** | Stock only if range is clear; otherwise income structures | Covered call, CSP, credit spread, iron condor |
+| **Neutral / range** | Stock only if range is clear; otherwise income structures | Covered call, CSP, bull put spread, bear call spread, iron condor |
 | **Risk-off / hedge** | Protective put, collar, reduce stock size | Same hedges; puts may already be expensive — use spreads |
 | **Event / unclear direction** | Long straddle only if implied move < your expected move | Iron butterfly / defined-risk credit with strict max loss |
 
@@ -1737,8 +1737,8 @@ The structure is *how* you express the idea after regime and IV are clear.
 
 - **Stock:** full upside and downside; no expiration; needs more capital
 - **Long call / put:** defined risk (premium); leveraged; time decay works against you
-- **Debit spread:** cheaper than naked option; caps profit and loss
-- **Credit spread / iron condor:** collect premium; profits if price stays in range; gap risk remains
+- **Bull call spread / bear put spread:** cheaper than naked option; caps profit and loss
+- **Bull put spread / bear call spread / iron condor:** collect premium; profits if price stays in range; gap risk remains
 - **Covered call / CSP:** income structures; assignment must be acceptable
 - **Collar / protective put:** hedge stock you already own
 - **No trade:** valid outcome when regime, IV, or risk check does not support the idea
@@ -1876,7 +1876,7 @@ def _credit_spread() -> None:
         pnl.append(val * 100)
     fig = go.Figure(go.Scatter(x=prices, y=pnl, mode="lines", fill="tozeroy", line=dict(color=COLORS["secondary"], width=3)))
     fig.add_hline(y=0, line_dash="dash")
-    fig.update_layout(**_chart_layout("Bull put credit spread @ expiration", "Stock price", "P&L ($)"))
+    fig.update_layout(**_chart_layout("Bull put spread @ expiration", "Stock price", "P&L ($)"))
     _plotly_chart(fig)
     st.markdown(
         "- **Max gain:** net credit received when price stays above the short put strike.\n"

@@ -441,7 +441,7 @@ def _build_critical_paths(
                 "options": "Compare implied move vs your thesis before buying straddles; prefer defined-risk spreads.",
                 "sectors_favor": leaders[:2],
                 "sectors_avoid": laggards[:2],
-                "structures": ["Long straddle", "Iron butterfly", "Debit spreads", "Collar"],
+                "structures": ["Long straddle", "Iron butterfly", "Bull call spreads", "Collar"],
                 "avoid": ["Short straddle without risk controls", "Illiquid strikes around events"],
             }
         )
@@ -470,7 +470,7 @@ def _options_guidance(regime: str, iv_context: str, bullish: bool) -> str:
         if "Low" in iv_context:
             return "Long calls or stock may be efficient; compare bull call spreads if you have a target."
         if "Elevated" in iv_context or "Expensive" in iv_context:
-            return "Prefer debit spreads over naked long calls; IV is not cheap."
+            return "Prefer bull call spreads over naked long calls; IV is not cheap."
         return "Compare stock, long call, and bull call spread; size down if breadth is mixed."
     if "Elevated" in iv_context or "Expensive" in iv_context:
         return "Credit structures can pay well, but use defined risk and respect gap risk."

@@ -131,6 +131,46 @@ def get_custom_css(theme_id: str | None = None) -> str:
             margin-bottom: 1rem;
         }}
 
+        /* Regime lesson product highlights */
+        .sip-regime-product {{
+            color: {colors['primary']};
+            font-weight: 700;
+        }}
+        .sip-lesson-body {{
+            color: inherit;
+            font-size: 1rem;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }}
+        .sip-regime-caption {{
+            color: #4b5563;
+            font-size: 0.875rem;
+            line-height: 1.45;
+            margin-bottom: 0.5rem;
+        }}
+        .sip-education-anchor {{
+            display: block;
+            height: 0;
+            margin: 0;
+            padding: 0;
+        }}
+        .sip-education-page-title {{
+            margin: 0 0 0.75rem 0;
+            padding-top: 0;
+            font-size: 1.35rem;
+            font-weight: 600;
+            line-height: 1.3;
+            scroll-margin-top: 4.5rem;
+        }}
+        .sip-education-section-title {{
+            margin: 1rem 0 0.5rem 0;
+            padding-top: 0;
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.35;
+            scroll-margin-top: 4.5rem;
+        }}
+
         /* Sidebar branding */
         [data-testid="stSidebar"] {{
             background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
