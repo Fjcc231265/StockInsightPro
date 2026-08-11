@@ -33,6 +33,141 @@ REGIME_TO_STRATEGY_BIASES: dict[str, list[str]] = {
     "Event-driven": ["High-movement event", "Defensive / hedge"],
 }
 
+TUTOR_ACTION_CANDIDATES: list[dict[str, Any]] = [
+    {
+        "id": "long_stock",
+        "name": "Long stock",
+        "direction": "bullish",
+        "regimes": {"Risk-on", "Mildly bullish"},
+        "iv_preference": "any",
+        "ownership": "either",
+        "simulator": "Stock P&L simulator",
+        "template": None,
+        "lesson_id": "stock-vs-call",
+        "purpose": "Participate in upside without expiration or theta.",
+    },
+    {
+        "id": "long_call",
+        "name": "Long call",
+        "direction": "bullish",
+        "regimes": {"Risk-on", "Mildly bullish", "Event-driven"},
+        "iv_preference": "low",
+        "ownership": "either",
+        "simulator": "Options P&L simulator",
+        "template": None,
+        "lesson_id": "calls-and-puts",
+        "purpose": "Defined-risk upside with less capital than stock.",
+    },
+    {
+        "id": "bull_call_spread",
+        "name": "Bull call spread",
+        "direction": "bullish",
+        "regimes": {"Risk-on", "Mildly bullish"},
+        "iv_preference": "fair_or_high",
+        "ownership": "either",
+        "simulator": "Strategy payoff lab",
+        "template": "Bull call spread",
+        "lesson_id": "close-spread-winners",
+        "purpose": "Defined-risk bullish exposure toward a realistic upside target.",
+    },
+    {
+        "id": "covered_call",
+        "name": "Covered call",
+        "direction": "neutral_bullish",
+        "regimes": {"Mildly bullish", "Neutral / range-bound"},
+        "iv_preference": "high",
+        "ownership": "required",
+        "simulator": "Strategy payoff lab",
+        "template": "Covered call",
+        "lesson_id": "covered-call",
+        "purpose": "Collect premium on shares when upside is expected to be limited.",
+    },
+    {
+        "id": "cash_secured_put",
+        "name": "Cash-secured put",
+        "direction": "neutral_bullish",
+        "regimes": {"Mildly bullish", "Neutral / range-bound"},
+        "iv_preference": "high",
+        "ownership": "not_required",
+        "simulator": "Options P&L simulator",
+        "template": None,
+        "lesson_id": "cash-secured-put",
+        "purpose": "Seek premium or a lower effective entry at an acceptable strike.",
+    },
+    {
+        "id": "protective_put",
+        "name": "Protective put",
+        "direction": "hedge",
+        "regimes": {"Risk-off", "High volatility", "Event-driven"},
+        "iv_preference": "not_extreme",
+        "ownership": "required",
+        "simulator": "Strategy payoff lab",
+        "template": "Protective put",
+        "lesson_id": "protective-put",
+        "purpose": "Keep shares while defining a downside floor.",
+    },
+    {
+        "id": "collar",
+        "name": "Collar",
+        "direction": "hedge",
+        "regimes": {"Risk-off", "High volatility", "Event-driven", "Neutral / range-bound"},
+        "iv_preference": "fair_or_high",
+        "ownership": "required",
+        "simulator": "Strategy payoff lab",
+        "template": "Collar",
+        "lesson_id": "collar",
+        "purpose": "Finance downside protection by accepting an upside cap.",
+    },
+    {
+        "id": "bear_put_spread",
+        "name": "Bear put spread",
+        "direction": "bearish",
+        "regimes": {"Risk-off", "High volatility"},
+        "iv_preference": "fair_or_high",
+        "ownership": "either",
+        "simulator": "Strategy payoff lab",
+        "template": "Bear put spread",
+        "lesson_id": "calls-and-puts",
+        "purpose": "Defined-risk bearish exposure with reduced premium versus a long put.",
+    },
+    {
+        "id": "long_put",
+        "name": "Long put",
+        "direction": "bearish",
+        "regimes": {"Risk-off", "Event-driven"},
+        "iv_preference": "low",
+        "ownership": "either",
+        "simulator": "Options P&L simulator",
+        "template": None,
+        "lesson_id": "calls-and-puts",
+        "purpose": "Defined-risk downside participation when IV is not already extreme.",
+    },
+    {
+        "id": "iron_condor",
+        "name": "Iron condor",
+        "direction": "neutral",
+        "regimes": {"Neutral / range-bound"},
+        "iv_preference": "high",
+        "ownership": "either",
+        "simulator": "Strategy payoff lab",
+        "template": "Custom",
+        "lesson_id": "iron-condor",
+        "purpose": "Defined-risk premium selling when price is expected to remain in a range.",
+    },
+    {
+        "id": "long_straddle",
+        "name": "Long straddle",
+        "direction": "volatility",
+        "regimes": {"Event-driven", "High volatility"},
+        "iv_preference": "low",
+        "ownership": "either",
+        "simulator": "Strategy payoff lab",
+        "template": "Long straddle",
+        "lesson_id": "straddle-strangle",
+        "purpose": "Seek a move in either direction that exceeds premium and IV crush.",
+    },
+]
+
 
 def build_trading_tutor_report(
     ticker: str,
@@ -48,11 +183,12 @@ def build_trading_tutor_report(
     options_kpis = get_options_kpis(ticker)
     index_technicals = _index_technical_snapshot("SPY")
     qqq_technicals = _index_technical_snapshot("QQQ")
+    symbol_technicals = _symbol_technical_snapshot(ticker)
 
     market_snapshot = _build_market_snapshot(
         overview, breadth, sectors, index_technicals, qqq_technicals, manual_internals
     )
-    symbol_context = _build_symbol_context(ticker, symbol_quote, options_kpis)
+    symbol_context = _build_symbol_context(ticker, symbol_quote, options_kpis, symbol_technicals)
     regime = _classify_regime(market_snapshot, symbol_context, manual_internals)
     critical_paths = _build_critical_paths(regime, market_snapshot, symbol_context)
     strategies = _recommended_strategies(regime, symbol_context)
@@ -107,6 +243,76 @@ def _period_return_pct(close: pd.Series, periods_back: int) -> float:
     else:
         base = float(close.iloc[-periods_back - 1])
     return ((latest - base) / base) * 100 if base else 0.0
+
+
+def _symbol_technical_snapshot(symbol: str) -> dict[str, Any]:
+    """Return trend, momentum, volume, and nearby-level evidence for the active symbol."""
+    try:
+        history = get_price_history(symbol, days=260, timeframe="Daily").sort_values("Date")
+        if history.empty:
+            return {"available": False}
+
+        close = pd.to_numeric(history["Close"], errors="coerce").dropna()
+        if close.empty:
+            return {"available": False}
+        latest = float(close.iloc[-1])
+        ma20 = float(calculate_simple_moving_average(close, 20).iloc[-1])
+        ma50 = float(calculate_simple_moving_average(close, 50).iloc[-1])
+        ma200 = float(calculate_simple_moving_average(close, 200).iloc[-1]) if len(close) >= 200 else None
+        rsi = float(calculate_rsi(close, 14).iloc[-1])
+        recent_20 = history.tail(20)
+        support = float(pd.to_numeric(recent_20["Low"], errors="coerce").min())
+        resistance = float(pd.to_numeric(recent_20["High"], errors="coerce").max())
+        high_52w = float(pd.to_numeric(history.tail(252)["High"], errors="coerce").max())
+        low_52w = float(pd.to_numeric(history.tail(252)["Low"], errors="coerce").min())
+
+        volume = pd.to_numeric(history.get("Volume"), errors="coerce").dropna()
+        relative_volume = None
+        if not volume.empty:
+            average_volume = float(volume.tail(20).mean())
+            relative_volume = float(volume.iloc[-1] / average_volume) if average_volume else None
+
+        if ma200 is not None and latest > ma20 > ma50 > ma200:
+            trend = "Strong uptrend"
+            trend_score = 2
+        elif latest > ma20 and latest > ma50:
+            trend = "Uptrend"
+            trend_score = 1
+        elif ma200 is not None and latest < ma20 < ma50 < ma200:
+            trend = "Strong downtrend"
+            trend_score = -2
+        elif latest < ma20 and latest < ma50:
+            trend = "Downtrend"
+            trend_score = -1
+        else:
+            trend = "Mixed / range"
+            trend_score = 0
+
+        momentum = "Overbought" if rsi >= 70 else "Oversold" if rsi <= 30 else "Positive" if rsi >= 55 else "Weak" if rsi <= 45 else "Balanced"
+        return {
+            "available": True,
+            "price": round(latest, 2),
+            "trend": trend,
+            "trend_score": trend_score,
+            "momentum": momentum,
+            "rsi14": round(rsi, 1),
+            "ma20": round(ma20, 2),
+            "ma50": round(ma50, 2),
+            "ma200": round(ma200, 2) if ma200 is not None else None,
+            "week_return_pct": round(_period_return_pct(close, 5), 2),
+            "month_return_pct": round(_period_return_pct(close, 21), 2),
+            "quarter_return_pct": round(_period_return_pct(close, 63), 2),
+            "relative_volume": round(relative_volume, 2) if relative_volume is not None else None,
+            "support_20d": round(support, 2),
+            "resistance_20d": round(resistance, 2),
+            "support_distance_pct": round(((support - latest) / latest) * 100, 2) if latest else None,
+            "resistance_distance_pct": round(((resistance - latest) / latest) * 100, 2) if latest else None,
+            "high_52w": round(high_52w, 2),
+            "low_52w": round(low_52w, 2),
+            "source": history.attrs.get("source", "Daily OHLC"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {"available": False, "error": str(exc)}
 
 
 def _build_market_snapshot(
@@ -231,9 +437,15 @@ def _breadth_aggregate_signal(breadth_rows: list[dict]) -> str:
     return "Mixed participation"
 
 
-def _build_symbol_context(ticker: str, quote: dict, options_kpis: dict) -> dict[str, Any]:
+def _build_symbol_context(
+    ticker: str,
+    quote: dict,
+    options_kpis: dict,
+    technicals: dict[str, Any],
+) -> dict[str, Any]:
     iv_rank = options_kpis.get("IV Rank")
     iv_context = _iv_context(iv_rank)
+    fundamental = _fundamental_snapshot(quote, technicals)
     return {
         "ticker": ticker.upper(),
         "price": quote.get("price"),
@@ -243,7 +455,82 @@ def _build_symbol_context(ticker: str, quote: dict, options_kpis: dict) -> dict[
         "options_available": iv_rank is not None and str(options_kpis.get("Source", "")).lower().find("unavailable") < 0,
         "options_kpis": options_kpis,
         "iv_context": iv_context,
+        "technical": technicals,
+        "fundamental": fundamental,
     }
+
+
+def _fundamental_snapshot(quote: dict[str, Any], technicals: dict[str, Any]) -> dict[str, Any]:
+    """Turn available company-overview fields into a concise, explainable context label."""
+    pe_ratio = _optional_float(quote.get("pe_ratio"))
+    peg_ratio = _optional_float(quote.get("peg_ratio"))
+    profit_margin = _optional_float(quote.get("profit_margin"))
+    beta = _optional_float(quote.get("beta"))
+    dividend_yield = _optional_float(quote.get("dividend_yield"))
+    market_cap = _optional_float(quote.get("market_cap"))
+    price = _optional_float(quote.get("price"))
+    high_52w = _optional_float(quote.get("52_week_high")) or _optional_float(technicals.get("high_52w"))
+    low_52w = _optional_float(quote.get("52_week_low")) or _optional_float(technicals.get("low_52w"))
+
+    evidence: list[str] = []
+    cautions: list[str] = []
+    score = 0
+    if profit_margin is not None:
+        margin_pct = profit_margin * 100 if abs(profit_margin) <= 1 else profit_margin
+        if margin_pct >= 20:
+            score += 2
+            evidence.append(f"Strong reported profit margin ({margin_pct:.1f}%).")
+        elif margin_pct >= 8:
+            score += 1
+            evidence.append(f"Positive reported profit margin ({margin_pct:.1f}%).")
+        elif margin_pct < 0:
+            score -= 2
+            cautions.append(f"Negative reported profit margin ({margin_pct:.1f}%).")
+    if pe_ratio is not None:
+        if pe_ratio <= 0:
+            score -= 1
+            cautions.append("P/E is not meaningful because reported earnings are non-positive.")
+        elif pe_ratio > 45:
+            score -= 1
+            cautions.append(f"High P/E ({pe_ratio:.1f}) raises expectation risk.")
+        else:
+            evidence.append(f"Reported P/E is {pe_ratio:.1f}.")
+    if peg_ratio is not None and peg_ratio > 2.5:
+        cautions.append(f"PEG ({peg_ratio:.1f}) implies a demanding growth valuation.")
+    if beta is not None:
+        (cautions if beta >= 1.5 else evidence).append(f"Beta is {beta:.2f}.")
+    if price and high_52w:
+        distance_from_high = ((price - high_52w) / high_52w) * 100
+        if distance_from_high >= -5:
+            evidence.append(f"Price is within {abs(distance_from_high):.1f}% of its 52-week high.")
+        elif distance_from_high <= -25:
+            cautions.append(f"Price is {abs(distance_from_high):.1f}% below its 52-week high.")
+
+    label = "Supportive" if score >= 2 else "Fragile" if score <= -2 else "Mixed / valuation-dependent"
+    return {
+        "label": label,
+        "score": score,
+        "pe_ratio": pe_ratio,
+        "peg_ratio": peg_ratio,
+        "profit_margin": profit_margin,
+        "beta": beta,
+        "dividend_yield": dividend_yield,
+        "market_cap": market_cap,
+        "high_52w": high_52w,
+        "low_52w": low_52w,
+        "evidence": evidence,
+        "cautions": cautions,
+        "source": quote.get("metadata_source", "Company overview"),
+    }
+
+
+def _optional_float(value: object) -> float | None:
+    if value in (None, "", "None", "N/A", "n/a"):
+        return None
+    try:
+        return float(str(value).replace(",", "").replace("%", ""))
+    except (TypeError, ValueError):
+        return None
 
 
 def _iv_context(iv_rank: object) -> str:
@@ -498,6 +785,389 @@ def _recommended_strategies(regime: dict[str, Any], symbol_context: dict[str, An
     elif "Elevated" in iv_context or "Expensive" in iv_context:
         selected.sort(key=lambda item: 0 if "high" in str(item.get("iv_bias", "")).lower() else 1)
     return selected[:5]
+
+
+def build_tutor_action_plan(
+    report: dict[str, Any],
+    *,
+    effective_regime: str | None = None,
+    user_profile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Rank educational structures using the confirmed regime and active-symbol evidence."""
+    profile = user_profile or {}
+    model_regime = str(report.get("regime", {}).get("primary", "Neutral / range-bound"))
+    regime = effective_regime or model_regime
+    symbol = report.get("symbol_context", {})
+    technical = symbol.get("technical", {})
+    fundamental = symbol.get("fundamental", {})
+    iv_context = str(symbol.get("iv_context", "Unknown"))
+    user_bias = str(profile.get("bias", "Tutor infer from chart"))
+    inferred_bias = _inferred_symbol_bias(technical)
+    working_bias = inferred_bias if user_bias == "Tutor infer from chart" else user_bias
+
+    candidates = [
+        _score_action_candidate(
+            candidate,
+            regime=regime,
+            model_regime=model_regime,
+            working_bias=working_bias,
+            technical=technical,
+            fundamental=fundamental,
+            iv_context=iv_context,
+            profile=profile,
+            symbol=symbol,
+        )
+        for candidate in TUTOR_ACTION_CANDIDATES
+    ]
+    candidates.sort(key=lambda item: (-int(item["score"]), str(item["name"])))
+
+    confidence = str(report.get("regime", {}).get("confidence", "Low"))
+    contradiction = _evidence_contradiction(regime, working_bias, technical)
+    no_trade_score = 40
+    no_trade_reasons = []
+    if confidence == "Low":
+        no_trade_score += 25
+        no_trade_reasons.append("Market-regime confidence is low.")
+    if contradiction:
+        no_trade_score += 20
+        no_trade_reasons.append(contradiction)
+    if iv_context == "Unknown":
+        no_trade_score += 10
+        no_trade_reasons.append("Options volatility context is unavailable.")
+    if profile.get("catalyst") not in (None, "", "None known") and not profile.get("catalyst_days"):
+        no_trade_score += 5
+        no_trade_reasons.append("A catalyst is known, but timing is not defined.")
+
+    return {
+        "effective_regime": regime,
+        "model_regime": model_regime,
+        "regime_was_overridden": regime != model_regime,
+        "working_bias": working_bias,
+        "inferred_bias": inferred_bias,
+        "symbol_assessment": _build_symbol_assessment(symbol, regime, working_bias),
+        "candidates": candidates[:5],
+        "no_trade_gate": {
+            "score": min(no_trade_score, 95),
+            "label": _fit_label(min(no_trade_score, 95)),
+            "reasons": no_trade_reasons or ["Evidence is sufficiently aligned to compare defined-risk scenarios."],
+        },
+        "profile": profile,
+    }
+
+
+def _score_action_candidate(
+    candidate: dict[str, Any],
+    *,
+    regime: str,
+    model_regime: str,
+    working_bias: str,
+    technical: dict[str, Any],
+    fundamental: dict[str, Any],
+    iv_context: str,
+    profile: dict[str, Any],
+    symbol: dict[str, Any],
+) -> dict[str, Any]:
+    score = 45
+    reasons: list[str] = []
+    cautions: list[str] = []
+
+    if regime in candidate["regimes"]:
+        score += 25
+        reasons.append(f"Fits the effective **{regime}** playbook used for this comparison.")
+    else:
+        score -= 18
+        cautions.append(f"Usually not a first-choice structure in **{regime}**.")
+
+    direction = str(candidate["direction"])
+    bias_delta, bias_note = _bias_fit(direction, working_bias)
+    score += bias_delta
+    (reasons if bias_delta >= 0 else cautions).append(bias_note)
+
+    trend_score = int(technical.get("trend_score", 0) or 0)
+    rsi14 = _optional_float(technical.get("rsi14"))
+    if direction in {"bullish", "neutral_bullish"}:
+        score += trend_score * 6
+        if trend_score > 0:
+            reasons.append(f"The symbol is in a **{technical.get('trend', 'constructive trend').lower()}**.")
+        elif trend_score < 0:
+            cautions.append("The symbol trend currently opposes a bullish structure.")
+        if rsi14 is not None and rsi14 >= 70:
+            score -= 8
+            cautions.append(f"RSI(14) is {rsi14:.1f}; bullish entry timing is extended.")
+    elif direction == "bearish":
+        score -= trend_score * 6
+        if trend_score < 0:
+            reasons.append(f"The symbol is in a **{technical.get('trend', 'weak trend').lower()}**.")
+        elif trend_score > 0:
+            cautions.append("The symbol trend currently opposes a bearish structure.")
+
+    iv_delta, iv_note = _iv_fit(str(candidate["iv_preference"]), iv_context)
+    score += iv_delta
+    (reasons if iv_delta >= 0 else cautions).append(iv_note)
+
+    owns_shares = bool(profile.get("owns_shares", False))
+    ownership = str(candidate["ownership"])
+    if ownership == "required":
+        if owns_shares:
+            score += 15
+            reasons.append("You indicated that you already own shares, so the stock overlay is structurally valid.")
+        else:
+            score -= 35
+            cautions.append("This overlay requires shares; you indicated that you do not own them.")
+    elif ownership == "not_required" and owns_shares:
+        cautions.append("Assignment would add shares to an existing position; check concentration risk.")
+
+    catalyst = str(profile.get("catalyst", "None known"))
+    if catalyst != "None known":
+        if direction == "volatility":
+            score += 12
+            reasons.append(f"A known **{catalyst.lower()}** catalyst makes a two-sided move scenario relevant.")
+        elif direction in {"neutral", "neutral_bullish"}:
+            score -= 12
+            cautions.append(f"A known **{catalyst.lower()}** catalyst increases gap risk for premium-selling structures.")
+
+    if candidate["id"] == "long_stock":
+        fundamental_score = int(fundamental.get("score", 0) or 0)
+        score += fundamental_score * 3
+        if fundamental_score > 0:
+            reasons.append("Available fundamental context is supportive of holding shares.")
+        elif fundamental_score < 0:
+            cautions.append("Available fundamental context is fragile; price risk is not defined by the structure.")
+
+    price = float(symbol.get("price") or 100)
+    risk_budget = float(profile.get("risk_budget") or 0)
+    stop_pct = float(profile.get("stop_pct") or 5)
+    if risk_budget > 0:
+        if candidate["id"] == "cash_secured_put":
+            approximate_assignment = price * 0.95 * 100
+            score -= 30
+            cautions.append(
+                f"One cash-secured contract reserves about ${approximate_assignment:,.0f}, "
+                f"far above the stated ${risk_budget:,.0f} maximum-loss learning budget."
+            )
+        elif candidate["id"] == "long_stock":
+            one_hundred_share_risk = price * (stop_pct / 100) * 100
+            if one_hundred_share_risk > risk_budget:
+                score -= 5
+                cautions.append(
+                    f"100 shares risk about ${one_hundred_share_risk:,.0f} to the stated invalidation; resize the share count."
+                )
+        elif candidate["id"] in {"long_call", "long_put"}:
+            illustrative_premium = price * 0.04 * 100
+            if illustrative_premium > risk_budget:
+                score -= 12
+                cautions.append(
+                    f"An illustrative one-contract premium near ${illustrative_premium:,.0f} exceeds the stated budget."
+                )
+
+    if model_regime != regime:
+        cautions.append(f"The user-confirmed regime differs from the tutor model (**{model_regime}**).")
+
+    final_score = max(5, min(95, score))
+    setup = _candidate_setup(candidate, symbol, profile)
+    return {
+        **candidate,
+        "regimes": sorted(candidate["regimes"]),
+        "score": final_score,
+        "fit_label": _fit_label(final_score),
+        "reasons": reasons[:4],
+        "cautions": cautions[:4],
+        "setup": setup,
+        "scenario": _candidate_scenario(candidate, setup),
+        "option_defaults": _candidate_option_defaults(candidate, symbol),
+    }
+
+
+def _inferred_symbol_bias(technical: dict[str, Any]) -> str:
+    trend_score = int(technical.get("trend_score", 0) or 0)
+    if trend_score > 0:
+        return "Bullish"
+    if trend_score < 0:
+        return "Bearish"
+    return "Neutral"
+
+
+def _bias_fit(direction: str, bias: str) -> tuple[int, str]:
+    compatible = {
+        "Bullish": {"bullish", "neutral_bullish"},
+        "Bearish": {"bearish", "hedge"},
+        "Neutral": {"neutral", "neutral_bullish"},
+        "Large move / direction uncertain": {"volatility", "hedge"},
+    }
+    if direction in compatible.get(bias, set()):
+        return 15, f"The structure matches the working symbol view: **{bias}**."
+    if direction == "hedge" and bias == "Bullish":
+        return 2, "A hedge can preserve a bullish holding while defining downside."
+    return -12, f"The structure does not directly express the working symbol view: **{bias}**."
+
+
+def _iv_fit(preference: str, iv_context: str) -> tuple[int, str]:
+    is_low = "Low" in iv_context
+    is_high = "Elevated" in iv_context or "Expensive" in iv_context
+    if iv_context == "Unknown" or preference == "any":
+        return 0, "IV does not materially improve the ranking, or is unavailable."
+    if preference == "low":
+        return (12, "IV is low enough to make long premium more efficient.") if is_low else (
+            -12,
+            "IV is not low; long premium faces richer pricing and possible IV contraction.",
+        )
+    if preference == "high":
+        return (12, "Elevated IV improves the premium available, subject to gap risk.") if is_high else (
+            -8,
+            "IV is not elevated enough to strongly favor premium selling.",
+        )
+    if preference == "fair_or_high":
+        return (8, "A spread helps offset fair-to-elevated option premium.") if not is_low else (
+            2,
+            "The structure still defines risk, although low IV reduces the financing benefit.",
+        )
+    if preference == "not_extreme":
+        return (-10, "Protection is expensive after the volatility spike.") if "Expensive" in iv_context else (
+            6,
+            "Protection is not priced at the most extreme IV classification.",
+        )
+    return 0, "IV fit is neutral."
+
+
+def _candidate_setup(
+    candidate: dict[str, Any],
+    symbol: dict[str, Any],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    price = float(symbol.get("price") or symbol.get("technical", {}).get("price") or 100)
+    target_pct = float(profile.get("target_pct") or 8)
+    stop_pct = float(profile.get("stop_pct") or 5)
+    target = price * (1 + target_pct / 100)
+    downside = price * (1 - stop_pct / 100)
+    horizon = str(profile.get("horizon", "Weeks"))
+    strike_text = {
+        "long_stock": f"Entry near ${price:.2f}; thesis target ${target:.2f}; invalidation near ${downside:.2f}.",
+        "long_call": f"Compare an ATM call near ${price:.2f} with enough time for the {horizon.lower()} thesis.",
+        "bull_call_spread": f"Illustrative long strike ${price:.2f}; short strike near target ${target:.2f}.",
+        "covered_call": f"Own shares near ${price:.2f}; compare a short call near ${target:.2f}.",
+        "cash_secured_put": f"Illustrative short put near ${downside:.2f}; reserve cash for assignment.",
+        "protective_put": f"Own shares near ${price:.2f}; compare a protective put near ${downside:.2f}.",
+        "collar": f"Own shares; compare a ${downside:.2f} put with a ${target:.2f} short call.",
+        "bear_put_spread": f"Illustrative long put near ${price:.2f}; short put near ${downside:.2f}.",
+        "long_put": f"Compare an ATM put near ${price:.2f}; bearish objective near ${downside:.2f}.",
+        "iron_condor": (
+            f"Illustrative short strikes near ${price * 0.95:.2f}/${price * 1.05:.2f}; "
+            f"protective wings near ${price * 0.90:.2f}/${price * 1.10:.2f}."
+        ),
+        "long_straddle": f"Illustrative call + put near the ${price:.2f} ATM strike; required move must exceed total premium.",
+    }
+    risk_budget = float(profile.get("risk_budget") or 0)
+    return {
+        "spot": round(price, 2),
+        "up_price": round(target, 2),
+        "down_price": round(downside, 2),
+        "horizon": horizon,
+        "structure": strike_text.get(candidate["id"], ""),
+        "risk_budget": risk_budget,
+        "risk_note": (
+            f"Keep modeled maximum loss at or below the stated ${risk_budget:,.0f} learning budget."
+            if risk_budget > 0
+            else "Enter a maximum-loss budget before treating the scenario as trade-ready."
+        ),
+    }
+
+
+def _candidate_scenario(candidate: dict[str, Any], setup: dict[str, Any]) -> list[dict[str, str]]:
+    direction = str(candidate["direction"])
+    outcomes = {
+        "bullish": ("Adverse: test stop/max loss.", "Stall risk: stock is flat; options lose time value.", "Favorable if price clears break-even."),
+        "neutral_bullish": ("Adverse: assignment or stock downside can dominate premium.", "Favorable if price remains controlled.", "Gain may be capped or put expires."),
+        "bearish": ("Favorable if downside exceeds break-even.", "Stall risk: long puts/spreads may lose time value.", "Adverse: test defined max loss."),
+        "neutral": ("Adverse if price breaks the lower range.", "Favorable inside the short-strike range.", "Adverse if price breaks the upper range."),
+        "volatility": ("Potentially favorable only if move exceeds total premium.", "Worst zone: theta and IV crush can dominate.", "Potentially favorable only if move exceeds total premium."),
+        "hedge": ("Protection activates; compare loss reduction with hedge cost.", "Insurance cost or capped income is visible.", "Shares participate, but a collar may cap upside."),
+    }
+    down, flat, up = outcomes.get(direction, ("Stress the downside.", "Review the flat case.", "Stress the upside."))
+    return [
+        {"case": "Downside", "price": f"${setup['down_price']:.2f}", "lesson": down},
+        {"case": "Flat", "price": f"${setup['spot']:.2f}", "lesson": flat},
+        {"case": "Upside", "price": f"${setup['up_price']:.2f}", "lesson": up},
+    ]
+
+
+def _candidate_option_defaults(candidate: dict[str, Any], symbol: dict[str, Any]) -> dict[str, Any] | None:
+    price = float(symbol.get("price") or 100)
+    iv = _optional_float(symbol.get("options_kpis", {}).get("30D IV")) or 30.0
+    if candidate["id"] == "long_call":
+        return {
+            "option_type": "Call",
+            "action": "Buy",
+            "stock_price": price,
+            "strike": price,
+            "premium": max(price * 0.04, 0.25),
+            "implied_volatility": iv,
+        }
+    if candidate["id"] == "long_put":
+        return {
+            "option_type": "Put",
+            "action": "Buy",
+            "stock_price": price,
+            "strike": price,
+            "premium": max(price * 0.04, 0.25),
+            "implied_volatility": iv,
+        }
+    if candidate["id"] == "cash_secured_put":
+        return {
+            "option_type": "Put",
+            "action": "Sell",
+            "stock_price": price,
+            "strike": price * 0.95,
+            "premium": max(price * 0.02, 0.15),
+            "implied_volatility": iv,
+        }
+    return None
+
+
+def _build_symbol_assessment(symbol: dict[str, Any], regime: str, bias: str) -> dict[str, Any]:
+    technical = symbol.get("technical", {})
+    fundamental = symbol.get("fundamental", {})
+    options = symbol.get("options_kpis", {})
+    evidence = [
+        f"Trend: **{technical.get('trend', 'Unavailable')}**; RSI(14): **{technical.get('rsi14', 'n/a')}**.",
+        (
+            f"20D support/resistance: **${float(technical.get('support_20d')):.2f} / "
+            f"${float(technical.get('resistance_20d')):.2f}**."
+            if technical.get("support_20d") is not None and technical.get("resistance_20d") is not None
+            else "Support/resistance: unavailable."
+        ),
+        f"Fundamental context: **{fundamental.get('label', 'Unknown')}**.",
+        (
+            f"Options: IV Rank **{options.get('IV Rank', 'n/a')}**, 30D IV **{options.get('30D IV', 'n/a')}%**, "
+            f"put/call OI **{options.get('Put/Call Ratio', 'n/a')}**."
+        ),
+    ]
+    alignment = _evidence_contradiction(regime, bias, technical)
+    return {
+        "headline": f"{symbol.get('ticker', 'Symbol')} is **{bias.lower()}** under a **{regime}** market assumption.",
+        "evidence": evidence,
+        "fundamental_evidence": fundamental.get("evidence", []),
+        "risks": [*fundamental.get("cautions", []), *([alignment] if alignment else [])],
+        "alignment": "Mixed evidence" if alignment else "Evidence broadly aligned",
+    }
+
+
+def _evidence_contradiction(regime: str, bias: str, technical: dict[str, Any]) -> str:
+    trend_score = int(technical.get("trend_score", 0) or 0)
+    if regime in {"Risk-on", "Mildly bullish"} and (bias == "Bearish" or trend_score < 0):
+        return "The market regime is constructive, but the symbol evidence is bearish."
+    if regime in {"Risk-off", "High volatility"} and (bias == "Bullish" or trend_score > 0):
+        return "The market regime is defensive, but the symbol evidence is bullish."
+    return ""
+
+
+def _fit_label(score: int) -> str:
+    if score >= 80:
+        return "Strong fit"
+    if score >= 65:
+        return "Worth comparing"
+    if score >= 50:
+        return "Conditional"
+    return "Weak fit"
 
 
 def _build_checklist_hints(

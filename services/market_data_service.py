@@ -65,16 +65,20 @@ def get_available_tickers() -> list[str]:
 
 
 def load_favorite_symbols() -> list[str]:
-    """Load favorite symbols from disk, falling back to default symbols."""
+    """Load favorite symbols from disk, falling back to defaults only when missing/invalid."""
     if not WATCHLIST_FILE.exists():
         return DEFAULT_WATCHLIST.copy()
     try:
         data = json.loads(WATCHLIST_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return DEFAULT_WATCHLIST.copy()
-    symbols = data.get("symbols", []) if isinstance(data, dict) else []
+    if not isinstance(data, dict) or "symbols" not in data:
+        return DEFAULT_WATCHLIST.copy()
+    symbols = data.get("symbols", [])
+    if not isinstance(symbols, list):
+        return DEFAULT_WATCHLIST.copy()
     normalized = [str(symbol).strip().upper() for symbol in symbols if str(symbol).strip()]
-    return list(dict.fromkeys(normalized)) or DEFAULT_WATCHLIST.copy()
+    return list(dict.fromkeys(normalized))
 
 
 def save_favorite_symbols(symbols: list[str]) -> list[str]:

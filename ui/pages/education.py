@@ -24,9 +24,17 @@ from services.education_service import (
 )
 from services.market_data_service import get_quote_summary, get_sector_performance
 from services.options_data_service import get_options_chain
-from services.trading_tutor_service import build_trading_tutor_report, get_tutor_checklists
+from services.trading_tutor_service import (
+    build_trading_tutor_report,
+    build_tutor_action_plan,
+    get_tutor_checklists,
+)
 from ui.components.page_router import render_submenu_page
-from ui.education_lesson_visuals import render_lesson_visuals, render_strategy_playbook_visuals, render_visual_keys
+from ui.education_lesson_visuals import (
+    LESSON_VISUALS,
+    render_strategy_playbook_visuals,
+    render_visual_keys,
+)
 from ui.regime_structure_guides import (
     LESSON_TITLES,
     REGIME_SECTION_STRUCTURES,
@@ -59,8 +67,17 @@ def _apply_education_navigation_pending() -> None:
         current.update(pending_defaults)
         st.session_state.education_single_option_defaults = current
         st.session_state.education_option_defaults_banner = (
-            "Simulator pre-filled from **Market regime framework** — adjust strikes and premium to your symbol."
+            "Simulator pre-filled from the education workflow — adjust strikes and premium to your symbol."
         )
+
+    pending_stock_defaults = st.session_state.pop("education_pending_stock_defaults", None)
+    if isinstance(pending_stock_defaults, dict):
+        st.session_state.stock_pnl_entry = float(pending_stock_defaults.get("entry_price", 100.0))
+        st.session_state.stock_pnl_direction = str(pending_stock_defaults.get("direction", "Long stock"))
+
+    pending_strategy_price = st.session_state.pop("education_pending_strategy_stock_price", None)
+    if pending_strategy_price is not None:
+        st.session_state.strategy_stock_price = float(pending_strategy_price)
 
     if "strategy_payoff_preset" not in st.session_state:
         st.session_state.strategy_payoff_preset = "Custom"
@@ -238,6 +255,8 @@ def _queue_education_navigation(
     lesson_section: str | None = None,
     strategy_template: str | None = None,
     option_defaults: dict | None = None,
+    stock_defaults: dict | None = None,
+    strategy_stock_price: float | None = None,
     scroll_target: str | None = None,
 ) -> None:
     """Jump to an Education submenu and optionally pre-fill simulators or lesson library."""
@@ -255,6 +274,10 @@ def _queue_education_navigation(
         st.session_state.education_strategy_template_banner = strategy_template
     if option_defaults:
         st.session_state.education_pending_option_defaults = option_defaults
+    if stock_defaults:
+        st.session_state.education_pending_stock_defaults = stock_defaults
+    if strategy_stock_price is not None:
+        st.session_state.education_pending_strategy_stock_price = float(strategy_stock_price)
     if scroll_target:
         st.session_state.education_scroll_target = scroll_target
     st.rerun()
@@ -387,6 +410,489 @@ def _render_regime_markdown(text: object, *, caption: bool = False) -> None:
         f'<div class="{css_class}">{_markdown_with_regime_products(text)}</div>',
         unsafe_allow_html=True,
     )
+
+
+_LESSON_SECTION_VISUALS: dict[tuple[str, str], list[str]] = {
+    ("market-mindset", "Why long-term stock-market investing can work"): ["long_term_market_gdp"],
+    ("market-mindset", "What moves the market"): ["market_drivers"],
+    ("support-resistance", "Support and resistance"): ["support_resistance"],
+    ("candlestick-patterns", "Useful patterns"): ["candle_anatomy"],
+    ("candlestick-patterns", "Caution"): ["candlestick_context"],
+    ("volume-and-gaps", "Volume"): ["volume_bars"],
+    ("trend-and-timeframes", "Moving averages"): ["trend_moving_averages"],
+    ("market-internals", "What market internals measure"): ["market_internals"],
+    ("market-internals", "VIX: fear and expected volatility"): ["vix_explainer"],
+    ("market-internals", "TICK: intraday buying and selling pressure"): ["tick_explainer"],
+    ("market-internals", "TRIN: breadth adjusted by volume"): ["trin_explainer"],
+    ("money-management-basics", "Position sizing"): ["position_sizing"],
+    ("calls-and-puts", "What a call controls"): ["long_call_payoff"],
+    ("calls-and-puts", "What a put controls"): ["long_put_payoff"],
+    ("greeks-basics", "Why Greeks come right after calls and puts"): ["greeks_sensitivity"],
+    ("greeks-basics", "Delta: directional exposure"): ["delta_by_strike"],
+    ("greeks-basics", "Theta: time decay"): ["theta_decay"],
+    ("option-quotes", "The spread is a cost"): ["bid_ask_spread"],
+    ("option-quotes", "How to read an option chain"): ["option_chain_example"],
+    ("open-interest-volume", "Reading volume with open interest"): ["volume_vs_oi"],
+    ("order-types-options", "Four core actions"): ["order_action_examples"],
+    ("order-types-options", "Limit orders and price control"): ["order_types", "bid_ask_spread"],
+    ("american-european", "Model choice"): ["american_european"],
+    ("intrinsic-time-value", "Intrinsic value"): ["intrinsic_time_value"],
+    ("iv-and-premium", "IV and premium"): ["iv_premium_effect"],
+    ("itm-atm-otm-selection", "Strike choice by goal"): ["strike_selection_matrix"],
+    ("itm-atm-otm-selection", "How Delta helps you choose"): ["delta_by_strike"],
+    ("rates-dividends", "When it matters most"): ["rates_dividend_effect"],
+    ("volatility-regimes", "VIX as thermometer"): ["vix_regimes"],
+    ("iv-classification", "Classification into action"): ["iv_scale"],
+    ("stock-vs-call", "Long stock"): ["stock_vs_call"],
+    ("protective-put", "Structure"): ["protective_put"],
+    ("covered-call", "Structure"): ["covered_call"],
+    ("cash-secured-put", "Structure"): ["cash_secured_put"],
+    ("vertical-credit-spreads", "Bear call spread"): ["credit_spread"],
+    ("iron-condor", "Structure"): ["iron_condor"],
+    ("straddle-strangle", "Long straddle"): ["long_straddle"],
+    ("collar", "Structure"): ["collar"],
+    ("diagonal-calls", "Structure"): ["diagonal_concept"],
+    ("stock-call-spread", "Structure"): ["bull_call_spread"],
+    ("leaps-short-call", "Structure"): ["leaps_short_call"],
+    ("rolling-covered-calls", "Roll up and out"): ["roll_covered_call"],
+    ("diagonal-management", "Short leg rules"): ["diagonal_concept"],
+    ("close-spread-winners", "Why not wait for max profit"): ["credit_spread_profit_zone"],
+    ("margin-awareness", "Spreads and diagonals"): ["margin_comparison"],
+    ("pre-trade-questions", "Checklist"): ["regime_decision_flow"],
+}
+
+_LESSON_MODULE_INTROS = {
+    "stock-foundations": (
+        "Build the evidence before making the decision",
+        "Connect price, trend, participation, and risk into one repeatable process.",
+        "map",
+    ),
+    "options-contracts": (
+        "Know the contract before taking the risk",
+        "Rights, obligations, liquidity, expiration, and order language all affect the outcome.",
+        "flow",
+    ),
+    "pricing-greeks": (
+        "Option price is a bundle of moving parts",
+        "Direction is only one input; time, volatility, rates, and sensitivity also matter.",
+        "event",
+    ),
+    "regime-framework": (
+        "Match the vehicle to the market weather",
+        "Start with environment, then choose direction, structure, size, and timing.",
+        "compass",
+    ),
+    "core-strategies": (
+        "Shape the payoff before entering",
+        "Each structure exchanges cost, probability, protection, and upside differently.",
+        "up",
+    ),
+    "advanced-structures": (
+        "Give every leg a specific job",
+        "Combined stock and option positions work only when each component supports the thesis.",
+        "range",
+    ),
+    "trade-management": (
+        "The plan continues after entry",
+        "Profit-taking, rolling, margin, invalidation, and position size define real execution.",
+        "shield",
+    ),
+}
+
+
+def _set_lesson_player_page(
+    page_key: str,
+    completed_key: str,
+    page_index: int,
+    completed_page: int | None = None,
+) -> None:
+    """Move a paced lesson player and record the page just completed."""
+    completed = set(st.session_state.get(completed_key, []))
+    if completed_page == -1:
+        completed_page = int(st.session_state.get(page_key, 0))
+    if completed_page is not None:
+        completed.add(int(completed_page))
+    st.session_state[completed_key] = sorted(completed)
+    st.session_state[page_key] = int(page_index)
+
+
+def _lesson_story_panel(
+    lesson: dict,
+    heading: str,
+    *,
+    body: object = "",
+    page_kind: str = "section",
+) -> None:
+    """Render a compact visual memory anchor without replacing technical content."""
+    stories = {
+        "Lesson map": (
+            "Read the environment before choosing the trade",
+            "Trend, volatility, breadth, and flow are your dashboard.",
+            "map",
+        ),
+        "Why regime comes first": (
+            "Check the weather before choosing the vehicle",
+            "A good setup still has to survive the broader market.",
+            "compass",
+        ),
+        "Risk-on regime": (
+            "A tailwind rewards upside participation",
+            "Strong breadth and falling volatility help bullish structures travel farther.",
+            "up",
+        ),
+        "Neutral or range-bound regime": (
+            "Price is bouncing inside a corridor",
+            "When breakouts fail, structure and strike placement matter more than conviction.",
+            "range",
+        ),
+        "Risk-off regime": (
+            "Protection comes before speed",
+            "When correlations rise, reduce exposure and define the downside.",
+            "shield",
+        ),
+        "High-volatility event regime": (
+            "The market has already priced a surprise",
+            "Compare the premium paid or received with the move you actually expect.",
+            "event",
+        ),
+        "Macro vs flow": (
+            "The forecast is not the same as today's tape",
+            "Macro describes the weather; flow shows what traders are doing now.",
+            "flow",
+        ),
+    }
+    if page_kind == "intro":
+        title, takeaway, scene = _LESSON_MODULE_INTROS.get(
+            str(lesson.get("module", "")),
+            ("Learn one decision at a time", "Connect each concept to a practical choice.", "map"),
+        )
+    elif page_kind == "summary":
+        title, takeaway, scene = (
+            "Review, apply, and test the idea",
+            "Use the technical chart, practice prompt, and simulator to turn reading into recall.",
+            "map",
+        )
+    elif heading in stories:
+        title, takeaway, scene = stories[heading]
+    else:
+        searchable = f"{heading} {body}".lower()
+        if any(word in searchable for word in ("theta", "time decay", "expiration", "calendar", "dte", "leaps")):
+            title, scene = "The clock is part of the position", "event"
+        elif any(word in searchable for word in ("iv ", "volatility", "vega", "event", "earnings", "premium")):
+            title, scene = "Premium carries the market's expectations", "event"
+        elif any(word in searchable for word in ("protect", "risk", "loss", "margin", "size", "assignment", "stop")):
+            title, scene = "Define survival before return", "shield"
+        elif any(word in searchable for word in ("range", "neutral", "condor", "covered", "cash-secured", "sideways")):
+            title, scene = "Work within the payoff boundaries", "range"
+        elif any(word in searchable for word in ("trend", "bull", "call", "upside", "growth", "moving average", "breakout")):
+            title, scene = "Direction needs evidence and room to work", "up"
+        elif any(word in searchable for word in ("flow", "volume", "open interest", "bid", "ask", "order", "liquidity")):
+            title, scene = "Follow how capital and contracts move", "flow"
+        else:
+            title, _, scene = _LESSON_MODULE_INTROS.get(
+                str(lesson.get("module", "")),
+                ("One concept at a time", "", "compass"),
+            )
+
+        plain_body = re.sub(r"\*\*(.+?)\*\*", r"\1", str(body)).strip()
+        first_sentence = re.split(r"(?<=[.!?])\s+", plain_body, maxsplit=1)[0]
+        takeaway = first_sentence[:190].rstrip()
+        if len(first_sentence) > 190:
+            takeaway += "…"
+        if not takeaway:
+            takeaway = f"Connect {heading.lower()} to a specific trading decision."
+
+    scene_shapes = {
+        "map": """
+            <rect x="28" y="34" width="82" height="58" rx="10" class="sip-story-soft"/>
+            <path d="M42 73 L58 57 L72 68 L94 45" class="sip-story-line"/>
+            <circle cx="42" cy="73" r="5" class="sip-story-accent"/>
+            <circle cx="94" cy="45" r="5" class="sip-story-positive"/>
+            <path d="M132 38 L174 38 L174 80 L132 80 Z" class="sip-story-card"/>
+            <path d="M142 50 H164 M142 60 H160 M142 70 H166" class="sip-story-thin"/>
+        """,
+        "compass": """
+            <circle cx="76" cy="62" r="37" class="sip-story-card"/>
+            <circle cx="76" cy="62" r="29" class="sip-story-soft"/>
+            <path d="M76 36 L88 67 L76 62 L64 67 Z" class="sip-story-accent"/>
+            <path d="M76 88 L64 57 L76 62 L88 57 Z" class="sip-story-primary"/>
+            <circle cx="154" cy="70" r="17" class="sip-story-person"/>
+            <path d="M154 87 V111 M154 94 L132 103 M154 94 L175 84" class="sip-story-person-line"/>
+        """,
+        "up": """
+            <path d="M24 100 H190 M34 91 L68 76 L98 81 L139 48 L181 33" class="sip-story-line"/>
+            <path d="M166 32 L181 33 L178 48" class="sip-story-line"/>
+            <circle cx="64" cy="47" r="15" class="sip-story-person"/>
+            <path d="M64 62 V91 M64 70 L47 80 M64 70 L82 59" class="sip-story-person-line"/>
+            <path d="M83 58 L103 48 L103 65 Z" class="sip-story-positive"/>
+        """,
+        "range": """
+            <rect x="25" y="34" width="164" height="68" rx="12" class="sip-story-soft"/>
+            <path d="M35 47 H179 M35 89 H179" class="sip-story-boundary"/>
+            <path d="M38 78 Q58 43 78 76 T118 76 T158 56 T181 72" class="sip-story-line"/>
+            <circle cx="48" cy="102" r="15" class="sip-story-person"/>
+            <path d="M48 117 V126 M48 113 L70 101" class="sip-story-person-line"/>
+        """,
+        "shield": """
+            <path d="M74 28 L119 43 V70 C119 93 101 109 74 119 C47 109 29 93 29 70 V43 Z" class="sip-story-shield"/>
+            <path d="M51 72 L67 87 L99 53" class="sip-story-check"/>
+            <path d="M143 35 L181 35 M150 53 L181 53 M158 71 L181 71" class="sip-story-down"/>
+            <circle cx="151" cy="100" r="15" class="sip-story-person"/>
+            <path d="M151 115 V127 M151 108 L132 99" class="sip-story-person-line"/>
+        """,
+        "event": """
+            <rect x="28" y="33" width="76" height="72" rx="9" class="sip-story-card"/>
+            <path d="M28 51 H104 M48 25 V42 M84 25 V42" class="sip-story-thin"/>
+            <path d="M60 61 L48 83 H64 L57 101 L87 73 H69 L79 61 Z" class="sip-story-accent"/>
+            <circle cx="154" cy="67" r="31" class="sip-story-event"/>
+            <path d="M154 38 V96 M125 67 H183" class="sip-story-event-line"/>
+        """,
+        "flow": """
+            <path d="M27 62 C31 45 49 39 63 48 C72 31 101 34 105 54 C122 54 128 77 111 83 H39 C20 83 17 64 27 62 Z" class="sip-story-cloud"/>
+            <path d="M42 95 L73 95 L67 88 M73 95 L67 102" class="sip-story-flow"/>
+            <path d="M103 108 L144 108 L138 101 M144 108 L138 115" class="sip-story-flow"/>
+            <circle cx="169" cy="71" r="15" class="sip-story-person"/>
+            <path d="M169 86 V116 M169 93 L148 101 M169 93 L187 84" class="sip-story-person-line"/>
+        """,
+    }
+
+    scene_svg = " ".join(scene_shapes[scene].split())
+    story_html = (
+        '<div class="sip-lesson-story">'
+        '<div class="sip-lesson-story-art" aria-hidden="true">'
+        f'<svg viewBox="0 0 215 140" role="img">{scene_svg}</svg>'
+        "</div>"
+        '<div class="sip-lesson-story-copy">'
+        '<div class="sip-lesson-story-kicker">MEMORY ANCHOR</div>'
+        f'<div class="sip-lesson-story-title">{html.escape(title)}</div>'
+        f'<div class="sip-lesson-story-takeaway">{html.escape(takeaway)}</div>'
+        "</div>"
+        "</div>"
+    )
+    st.markdown(story_html, unsafe_allow_html=True)
+
+
+def _render_lesson_player(
+    lesson: dict,
+    *,
+    expanded: bool,
+    focus_section: str,
+) -> str:
+    """Render any curriculum lesson as paced pages while preserving technical depth."""
+    lesson_id = str(lesson.get("id", "lesson"))
+    sections = [section for section in lesson.get("sections", []) if isinstance(section, dict)]
+    pages = [
+        {"kind": "intro", "heading": "Lesson map"},
+        *[{"kind": "section", **section} for section in sections],
+        {"kind": "summary", "heading": "Key takeaways and practice"},
+    ]
+    page_key = f"education_lesson_player_page_{lesson_id}"
+    completed_key = f"education_lesson_player_completed_{lesson_id}"
+
+    if focus_section:
+        matching_page = next(
+            (
+                index
+                for index, page in enumerate(pages)
+                if page.get("kind") == "section" and str(page.get("heading")) == focus_section
+            ),
+            None,
+        )
+        if matching_page is not None:
+            st.session_state[page_key] = matching_page
+
+    current_page = max(0, min(int(st.session_state.get(page_key, 0)), len(pages) - 1))
+    st.session_state[page_key] = current_page
+    completed = set(st.session_state.get(completed_key, []))
+    lesson_complete = len(pages) - 1 in completed
+    page = pages[current_page]
+    progress_pct = int(((current_page + 1) / len(pages)) * 100)
+
+    lesson_anchor_id = _education_lesson_anchor_id(lesson_id)
+    section_anchor_id = (
+        _education_lesson_anchor_id(lesson_id, focus_section) if expanded and focus_section else None
+    )
+    active_anchor_id = section_anchor_id or lesson_anchor_id
+    _render_education_anchor(active_anchor_id)
+
+    st.markdown(
+        f"""
+<div class="sip-lesson-player-header">
+  <div>
+    <span class="sip-lesson-player-pill">Paced lesson</span>
+    <div class="sip-lesson-player-count">Page {current_page + 1} of {len(pages)}</div>
+  </div>
+  <div class="sip-lesson-player-progress-label">{progress_pct}% through this lesson</div>
+</div>
+<div class="sip-lesson-player-progress" aria-label="{progress_pct}% complete">
+  <div style="width:{progress_pct}%"></div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    outline_col, content_col = st.columns([0.27, 0.73], gap="large")
+    with outline_col:
+        st.markdown("**Lesson pages**")
+        for index, outline_page in enumerate(pages):
+            is_active = index == current_page
+            is_complete = index in completed
+            marker = "✓" if is_complete else f"{index + 1}"
+            label = f"{marker} · {outline_page.get('heading', 'Page')}"
+            st.button(
+                label,
+                key=f"lesson_player_outline_{lesson_id}_{index}",
+                type="primary" if is_active else "secondary",
+                use_container_width=True,
+                on_click=_set_lesson_player_page,
+                args=(page_key, completed_key, index, -1),
+            )
+
+    with content_col:
+        heading = str(page.get("heading", "Lesson"))
+        page_kind = str(page.get("kind", "section"))
+        _lesson_story_panel(
+            lesson,
+            heading,
+            body=page.get("body", ""),
+            page_kind=page_kind,
+        )
+        st.markdown(f"### {heading}")
+
+        if page_kind == "intro":
+            st.markdown(
+                "This lesson is divided into focused pages so you can study one decision at a time "
+                "without losing the formulas, charts, examples, or execution details."
+            )
+            objectives = lesson.get("objectives", [])
+            if objectives:
+                st.markdown("**By the end of this lesson, you will be able to:**")
+                objective_notes = lesson.get("objective_notes", {})
+                for objective in objectives:
+                    st.markdown(f"- {_escape_markdown_math(objective)}")
+                    note = objective_notes.get(str(objective))
+                    if note:
+                        note_html = html.escape(str(note)).replace("$", "&#36;")
+                        note_html = note_html.replace("\n\n", "<br><br>").replace("\n", "<br>")
+                        st.markdown(
+                            f'<div class="sip-lesson-objective-note">{note_html}</div>',
+                            unsafe_allow_html=True,
+                        )
+            st.info(
+                "Use **Next** or the page outline. Technical visuals stay with the relevant concept, "
+                "and the review page keeps the practice prompt and related simulator."
+            )
+        elif page_kind == "section":
+            body = page.get("body", "")
+            if body:
+                if str(lesson.get("module")) == "regime-framework":
+                    _render_regime_markdown(body)
+                else:
+                    st.markdown(_escape_markdown_math(body))
+
+            section_visuals = _LESSON_SECTION_VISUALS.get((lesson_id, heading), [])
+            if section_visuals:
+                render_visual_keys(
+                    section_visuals,
+                    heading="**Technical visual**",
+                    key_prefix=f"{lesson_id}_{_education_anchor_slug(heading)}",
+                )
+            if REGIME_SECTION_STRUCTURES.get((lesson_id, heading)):
+                with st.expander(
+                    "Explore matching products, numeric examples, and simulators",
+                    expanded=False,
+                ):
+                    _render_regime_structure_guides(lesson_id, heading)
+        else:
+            st.success("You reached the review page. Revisit any page from the outline at left.")
+            key_points = lesson.get("key_points", [])
+            if key_points:
+                st.markdown("**Key takeaways**")
+                for point in key_points:
+                    st.markdown(f"- {_escape_markdown_math(point)}")
+            practice = lesson.get("practice")
+            if practice:
+                st.markdown("**Apply it now**")
+                st.markdown(_escape_markdown_math(practice))
+
+            contextual_visuals = {
+                visual_key
+                for (mapped_lesson_id, _), visual_keys in _LESSON_SECTION_VISUALS.items()
+                if mapped_lesson_id == lesson_id
+                for visual_key in visual_keys
+            }
+            review_visuals = [
+                visual_key
+                for visual_key in LESSON_VISUALS.get(lesson_id, [])
+                if visual_key not in contextual_visuals
+            ]
+            if review_visuals:
+                render_visual_keys(
+                    review_visuals,
+                    heading="**Technical review visual**",
+                    key_prefix=f"{lesson_id}_review",
+                )
+
+            simulator = lesson.get("related_simulator")
+            if simulator:
+                simulator_name = str(simulator)
+                st.markdown("**Continue in the interactive tool**")
+                st.caption(
+                    f"The related **{simulator_name}** remains part of this lesson. "
+                    "Open it to test the assumptions numerically."
+                )
+                if st.button(
+                    f"Open {simulator_name}",
+                    key=f"lesson_player_simulator_{lesson_id}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    _queue_education_navigation(
+                        submenu=simulator_name,
+                        scroll_target=_education_sim_anchor_id(simulator_name),
+                    )
+
+    previous_col, status_col, next_col = st.columns([1, 1.4, 1])
+    with previous_col:
+        st.button(
+            "← Previous",
+            key=f"lesson_player_previous_{lesson_id}",
+            disabled=current_page == 0,
+            use_container_width=True,
+            on_click=_set_lesson_player_page,
+            args=(page_key, completed_key, max(0, current_page - 1), None),
+        )
+    with status_col:
+        if lesson_complete:
+            status = "Lesson complete ✓"
+        elif current_page == len(pages) - 1:
+            status = "Review complete — mark the lesson finished"
+        else:
+            status = f"{len(pages) - current_page - 1} page(s) left"
+        st.markdown(f'<div class="sip-lesson-player-status">{status}</div>', unsafe_allow_html=True)
+    with next_col:
+        if lesson_complete:
+            next_label = "Completed ✓"
+        elif current_page == len(pages) - 1:
+            next_label = "Mark complete ✓"
+        else:
+            next_label = "Next →"
+        st.button(
+            next_label,
+            key=f"lesson_player_next_{lesson_id}",
+            disabled=lesson_complete,
+            type="primary",
+            use_container_width=True,
+            on_click=_set_lesson_player_page,
+            args=(
+                page_key,
+                completed_key,
+                min(len(pages) - 1, current_page + 1),
+                -1,
+            ),
+        )
+
+    return active_anchor_id
 
 
 def _render_tutor_suggestion(content: str) -> None:
@@ -618,43 +1124,173 @@ premiums, volatility, time, rates, contract counts, and commissions.
 
 
 def _learning_roadmap() -> None:
-    """Render the structured learning path from local curriculum."""
+    """Render a chapter-based roadmap with goals, outcomes, and guided practice."""
     st.markdown("### Learning roadmap")
-    st.caption(
-        "Follow these modules in order: stock and chart foundations, options mechanics, "
-        "regime thinking, strategies, and trade management. Open **Lesson library** for full text."
-    )
     modules = get_roadmap_modules()
     if not modules:
         st.warning("Curriculum file not found. Add `data/education_lessons.json` to enable lessons.")
         return
 
+    total_lessons = sum(len(module.get("lesson_ids", [])) for module in modules)
+    total_tools = len(
+        {
+            str(tool)
+            for module in modules
+            for tool in module.get("recommended_simulators", [])
+        }
+    )
+    st.markdown(
+        f"""
+<div class="sip-roadmap-hero">
+  <div class="sip-roadmap-hero-copy">
+    <div class="sip-roadmap-eyebrow">YOUR LEARNING JOURNEY</div>
+    <div class="sip-roadmap-hero-title">From market foundations to disciplined execution</div>
+    <div class="sip-roadmap-hero-text">
+      Each chapter answers a practical question, defines what you should be able to do,
+      and ends with a checkpoint that turns reading into applied skill.
+    </div>
+  </div>
+  <div class="sip-roadmap-hero-stats">
+    <div><strong>{len(modules)}</strong><span>chapters</span></div>
+    <div><strong>{total_lessons}</strong><span>lessons</span></div>
+    <div><strong>{total_tools}</strong><span>practice tools</span></div>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    chapter_track = "".join(
+        (
+            '<div class="sip-roadmap-track-stop">'
+            f'<span>{int(module.get("order", index)):02d}</span>'
+            f'<small>{html.escape(str(module.get("title", "Chapter")))}</small>'
+            "</div>"
+        )
+        for index, module in enumerate(modules, start=1)
+    )
+    st.markdown(
+        f'<div class="sip-roadmap-track">{chapter_track}</div>',
+        unsafe_allow_html=True,
+    )
+
     for index, module in enumerate(modules, start=1):
-        title = module.get("title", "Module")
-        summary = module.get("summary", "")
-        focus_items = module.get("focus", [])
-        lesson_ids = module.get("lesson_ids", [])
-        simulators = module.get("recommended_simulators", [])
-        with st.expander(f"{index}. {title}", expanded=index == 1):
-            st.write(summary)
+        module_id = str(module.get("id", ""))
+        title = str(module.get("title", "Chapter"))
+        summary = str(module.get("summary", ""))
+        chapter_goal = str(module.get("chapter_goal", summary))
+        objectives = [str(item) for item in module.get("objectives", [])]
+        focus_items = [str(item) for item in module.get("focus", [])]
+        lesson_ids = [str(item) for item in module.get("lesson_ids", [])]
+        simulators = [str(item) for item in module.get("recommended_simulators", [])]
+        checkpoint = str(module.get("checkpoint", "Apply the chapter concepts to one current market example."))
+
+        with st.expander(
+            f"Chapter {index} · {title}",
+            expanded=index == 1,
+        ):
+            st.markdown(
+                f"""
+<div class="sip-roadmap-chapter-head">
+  <div class="sip-roadmap-chapter-number">{index:02d}</div>
+  <div>
+    <div class="sip-roadmap-chapter-label">CHAPTER {index} · {len(lesson_ids)} LESSONS</div>
+    <div class="sip-roadmap-chapter-title">{html.escape(title)}</div>
+    <div class="sip-roadmap-chapter-summary">{html.escape(summary)}</div>
+  </div>
+</div>
+<div class="sip-roadmap-goal">
+  <span>CHAPTER PURPOSE</span>
+  <strong>{html.escape(chapter_goal)}</strong>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+            if objectives:
+                st.markdown("#### What you will be able to do")
+                objective_cards = "".join(
+                    (
+                        '<div class="sip-roadmap-objective">'
+                        f'<div class="sip-roadmap-objective-number">{objective_index:02d}</div>'
+                        f"<p>{html.escape(objective)}</p>"
+                        "</div>"
+                    )
+                    for objective_index, objective in enumerate(objectives, start=1)
+                )
+                st.markdown(
+                    f'<div class="sip-roadmap-objective-grid">{objective_cards}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            lesson_rows = []
+            for lesson_index, lesson_id in enumerate(lesson_ids, start=1):
+                lesson = get_lesson(lesson_id)
+                lesson_title = str(lesson.get("title", lesson_id)) if lesson else lesson_id
+                lesson_rows.append(
+                    '<div class="sip-roadmap-lesson-step">'
+                    f'<div class="sip-roadmap-lesson-dot">{lesson_index}</div>'
+                    f'<div><small>LESSON {lesson_index}</small>'
+                    f"<strong>{html.escape(lesson_title)}</strong></div>"
+                    "</div>"
+                )
+            if lesson_rows:
+                st.markdown("#### Chapter journey")
+                st.markdown(
+                    f'<div class="sip-roadmap-lesson-grid">{"".join(lesson_rows)}</div>',
+                    unsafe_allow_html=True,
+                )
+
             if focus_items:
-                st.markdown("**What this module connects**")
-                for item in focus_items:
-                    st.markdown(f"- {item}")
-            if lesson_ids:
-                st.markdown("**Lessons in this module**")
-                for lesson_id in lesson_ids:
-                    lesson = get_lesson(str(lesson_id))
-                    if lesson:
-                        st.markdown(f"- {lesson.get('title', lesson_id)}")
-            if simulators:
-                st.caption("Practice: " + ", ".join(simulators))
+                connection_cards = "".join(
+                    f'<div class="sip-roadmap-connection">{html.escape(item)}</div>'
+                    for item in focus_items
+                )
+                st.markdown(
+                    '<div class="sip-roadmap-connections">'
+                    '<div class="sip-roadmap-mini-label">CONCEPTS THIS CHAPTER CONNECTS</div>'
+                    f'<div class="sip-roadmap-connection-grid">{connection_cards}</div>'
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+            tool_badges = "".join(
+                f'<span class="sip-roadmap-tool">{html.escape(tool)}</span>'
+                for tool in simulators
+            )
+            st.markdown(
+                '<div class="sip-roadmap-checkpoint">'
+                '<div class="sip-roadmap-checkpoint-icon">✓</div>'
+                '<div><span>CHAPTER CHECKPOINT</span>'
+                f"<strong>{html.escape(checkpoint)}</strong>"
+                f'<div class="sip-roadmap-tools">{tool_badges}</div>'
+                "</div></div>",
+                unsafe_allow_html=True,
+            )
+
+            if lesson_ids and st.button(
+                f"Start Chapter {index} in Lesson library →",
+                key=f"roadmap_start_chapter_{module_id}",
+                type="primary",
+                use_container_width=True,
+            ):
+                first_lesson_id = lesson_ids[0]
+                _queue_education_navigation(
+                    submenu="Lesson library",
+                    module_focus=module_id,
+                    lesson_focus=first_lesson_id,
+                    scroll_target=_education_lesson_anchor_id(first_lesson_id),
+                )
 
     st.info(
-        "Before every trade, answer: What is my thesis? What can go wrong? "
-        "What is my maximum loss? What price or time invalidates the idea?"
+        "Roadmap rule: do not advance only because you finished reading. Advance when you can "
+        "explain the chapter objective, complete its checkpoint, and reproduce the decision in a simulator."
     )
-    st.caption("Source material is stored locally in `data/education_lessons.json` (concepts only, no vendor branding).")
+
+
+def _select_education_module(module_id: str) -> None:
+    """Select one lesson module before the next Lesson Library rerun."""
+    st.session_state.education_module_view = module_id
 
 
 def _lesson_library() -> None:
@@ -679,30 +1315,38 @@ def _lesson_library() -> None:
     default_module_index = 0
     if focus_module and focus_module in module_options:
         default_module_index = list(module_options.keys()).index(focus_module)
+        st.session_state.education_module_view = focus_module
     selected_id = st.selectbox(
         "Module view",
         options=list(module_options.keys()),
         format_func=lambda key: module_options[key],
         index=default_module_index,
+        key="education_module_view",
     )
     if selected_id == "all":
         total_lessons = sum(len(get_lessons_for_module(str(module["id"]))) for module in modules)
-        st.caption(f"{total_lessons} lessons shown in roadmap order.")
+        st.caption(
+            f"{total_lessons} lessons in the curriculum. Open one module at a time for a faster, "
+            "focused reading experience."
+        )
         for module in modules:
             module_id = str(module["id"])
             module_lessons = get_lessons_for_module(module_id)
             if not module_lessons:
                 continue
-            st.markdown(f"#### {module.get('order', '')}. {module.get('title', module_id)}")
-            st.caption(module.get("summary", ""))
-            for lesson in module_lessons:
-                expand = bool(focus_lesson) and str(lesson.get("id")) == focus_lesson
-                _render_lesson_card(
-                    lesson,
-                    expanded=expand,
-                    focus_section=focus_section if expand else "",
+            with st.container(border=True):
+                st.markdown(f"#### {module.get('order', '')}. {module.get('title', module_id)}")
+                st.caption(module.get("summary", ""))
+                st.markdown(
+                    " · ".join(str(lesson.get("title", "Lesson")) for lesson in module_lessons)
                 )
-            st.divider()
+                st.button(
+                    f"Open module {module.get('order', '')}",
+                    key=f"education_open_module_{module_id}",
+                    use_container_width=True,
+                    on_click=_select_education_module,
+                    args=(module_id,),
+                )
     else:
         lessons = get_lessons_for_module(selected_id)
         st.caption(f"{len(lessons)} lesson(s) in **{get_module_title(selected_id)}**.")
@@ -716,130 +1360,91 @@ def _lesson_library() -> None:
 
 
 def _render_lesson_card(lesson: dict, expanded: bool = False, focus_section: str = "") -> None:
-    """Render one lesson as an expander."""
+    """Render one curriculum lesson through the reusable paced player."""
     title = lesson.get("title", "Lesson")
     with st.expander(title, expanded=bool(expanded)):
-        lesson_id = str(lesson.get("id", ""))
-        lesson_anchor_id = _education_lesson_anchor_id(lesson_id)
-        section_anchor_id = (
-            _education_lesson_anchor_id(lesson_id, focus_section)
-            if expanded and focus_section
-            else None
+        active_anchor_id = _render_lesson_player(
+            lesson,
+            expanded=expanded,
+            focus_section=focus_section,
         )
-        if expanded and not focus_section:
-            _render_education_anchor(lesson_anchor_id)
-        intro_heading = "Why long-term stock-market investing can work"
-        if lesson_id == "market-mindset":
-            for section in lesson.get("sections", []):
-                if section.get("heading") == intro_heading:
-                    st.markdown(f"**{intro_heading}**")
-                    st.markdown(_escape_markdown_math(section.get("body", "")))
-                    render_visual_keys(
-                        ["long_term_market_gdp"],
-                        heading=None,
-                        key_prefix=lesson_id,
-                    )
-                    break
-
-        objectives = lesson.get("objectives", [])
-        if objectives:
-            st.markdown("**Objectives**")
-            objective_notes = lesson.get("objective_notes", {})
-            for item in objectives:
-                st.markdown(f"- {_escape_markdown_math(item)}")
-                note = objective_notes.get(str(item))
-                if note:
-                    note_html = html.escape(str(note)).replace("$", "&#36;")
-                    note_html = note_html.replace("\n\n", "<br><br>").replace("\n", "<br>")
-                    st.markdown(
-                        f"""
-<div style="margin: -0.25rem 0 0.85rem 1.5rem; color: #4b5563; font-size: 0.95rem; line-height: 1.45;">
-{note_html}
-</div>
-""",
-                        unsafe_allow_html=True,
-                    )
-        if lesson_id == "candlestick-patterns":
-            render_visual_keys(["candle_anatomy"], key_prefix=lesson_id)
-        for section in lesson.get("sections", []):
-            heading = section.get("heading")
-            body = section.get("body", "")
-            if lesson_id == "market-mindset" and heading == intro_heading:
-                continue
-            section_anchor = None
-            if expanded and focus_section and str(heading) == focus_section:
-                section_anchor = _education_lesson_anchor_id(lesson_id, focus_section)
-            if heading:
-                _render_education_section_heading(str(heading), section_anchor)
-            if body:
-                if str(lesson.get("module")) == "regime-framework":
-                    _render_regime_markdown(body)
-                else:
-                    st.markdown(_escape_markdown_math(body))
-            if str(lesson.get("module")) == "regime-framework" and heading:
-                _render_regime_structure_guides(lesson_id, str(heading))
-            if lesson_id == "market-mindset" and heading == "What moves the market":
-                render_visual_keys(
-                    ["market_drivers"],
-                    heading=None,
-                    key_prefix=lesson_id,
-                )
-            if lesson_id == "market-internals":
-                market_internal_visuals = {
-                    "What market internals measure": ["market_internals"],
-                    "VIX: fear and expected volatility": ["vix_explainer"],
-                    "TICK: intraday buying and selling pressure": ["tick_explainer"],
-                    "TRIN: breadth adjusted by volume": ["trin_explainer"],
-                }
-                visual_keys = market_internal_visuals.get(str(heading), [])
-                if visual_keys:
-                    render_visual_keys(visual_keys, heading=None, key_prefix=lesson_id)
-        key_points = lesson.get("key_points", [])
-        if key_points:
-            st.markdown("**Key points**")
-            for point in key_points:
-                st.markdown(f"- {_escape_markdown_math(point)}")
-        practice = lesson.get("practice")
-        if practice:
-            st.markdown("**Practice**")
-            st.markdown(_escape_markdown_math(practice))
-        if lesson_id == "candlestick-patterns":
-            render_visual_keys(["candlestick_context"], key_prefix=lesson_id)
-        elif lesson_id == "market-mindset":
-            pass
-        elif lesson_id == "market-internals":
-            pass
-        else:
-            render_lesson_visuals(lesson_id)
-        simulator = lesson.get("related_simulator")
-        if simulator:
-            st.caption(f"Related tool: **{simulator}**")
-
         if expanded:
-            _finish_education_scroll(section_anchor_id or lesson_anchor_id)
+            _finish_education_scroll(active_anchor_id)
 
 
 def _trading_tutor() -> None:
-    """Render the unified live trading tutor across regime, strategy, checklist, and rules."""
+    """Render an action-oriented tutor for the active dashboard symbol."""
     ticker = st.session_state.get("selected_ticker", "AAPL")
+    if st.session_state.get("tutor_session_ticker") != ticker:
+        st.session_state.tutor_session_ticker = ticker
+        for key in (
+            "tutor_regime_response",
+            "tutor_regime_override",
+            "tutor_report_cache",
+            "tutor_report_cache_key",
+        ):
+            st.session_state.pop(key, None)
+
     st.markdown("### Trading tutor")
     st.caption(
-        "One guided workflow: read the market, choose a path, validate the trade, and confirm discipline rules. "
-        "Live index, sector, breadth, and options context are combined with your selected symbol."
+        f"A live coaching session for **{ticker}**: diagnose the environment, challenge the evidence, "
+        "compare structures, and test the thesis in a simulator."
+    )
+    st.info(
+        "The tutor ranks educational scenarios rather than issuing a personalized buy/sell order. "
+        "A high fit score means the structure matches the stated assumptions—not that the trade will be profitable."
     )
 
-    with st.expander("Optional market internals (TICK / TRIN)", expanded=False):
+    with st.expander("1 · Complete the evidence the tutor cannot observe", expanded=True):
         st.caption(
-            "VIX is loaded from the market overview proxy (VIXY). TICK and TRIN are optional manual inputs "
-            "until a live internals feed is connected."
+            "Market, sector, price, fundamental, and options data load automatically. "
+            "Add only context that is not available from the current data feeds."
         )
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             tick_value = st.number_input("NYSE TICK (optional)", value=0.0, step=50.0, key="tutor_tick")
         with col2:
             trin_value = st.number_input("TRIN (optional)", value=0.0, step=0.05, format="%.2f", key="tutor_trin")
         with col3:
-            use_internals = st.checkbox("Include manual internals in regime score", value=False, key="tutor_use_internals")
+            use_internals = st.checkbox("Use TICK / TRIN in score", value=False, key="tutor_use_internals")
+        with col4:
+            catalyst = st.selectbox(
+                "Known catalyst",
+                ["None known", "Earnings", "Macro release", "Company event", "Other"],
+                key="tutor_catalyst",
+            )
+
+        profile_col1, profile_col2, profile_col3 = st.columns(3)
+        with profile_col1:
+            owns_shares = st.checkbox(f"I already own {ticker} shares", key="tutor_owns_shares")
+            horizon = st.selectbox("Decision horizon", ["Days", "Weeks", "Months"], index=1, key="tutor_horizon")
+        with profile_col2:
+            symbol_bias = st.selectbox(
+                "Your current view of the symbol",
+                ["Tutor infer from chart", "Bullish", "Neutral", "Bearish", "Large move / direction uncertain"],
+                key="tutor_symbol_bias",
+            )
+            catalyst_days = st.number_input(
+                "Days until catalyst (0 if unknown)",
+                min_value=0,
+                value=0,
+                step=1,
+                key="tutor_catalyst_days",
+                disabled=catalyst == "None known",
+            )
+        with profile_col3:
+            risk_budget = st.number_input(
+                "Maximum-loss learning budget ($)",
+                min_value=0.0,
+                value=500.0,
+                step=100.0,
+                key="tutor_risk_budget",
+            )
+            target_col, stop_col = st.columns(2)
+            with target_col:
+                target_pct = st.number_input("Target %", min_value=1.0, value=8.0, step=1.0, key="tutor_target_pct")
+            with stop_col:
+                stop_pct = st.number_input("Invalidation %", min_value=1.0, value=5.0, step=1.0, key="tutor_stop_pct")
 
     manual_internals: dict[str, float] = {}
     if use_internals:
@@ -848,12 +1453,12 @@ def _trading_tutor() -> None:
         if trin_value > 0:
             manual_internals["trin"] = float(trin_value)
 
-    force_refresh = st.button("Refresh market read", type="primary", key="tutor_refresh")
+    force_refresh = st.button("Rebuild tutor session", type="primary", key="tutor_refresh")
     if force_refresh:
         st.session_state.pop("tutor_report_cache", None)
         st.session_state.pop("tutor_report_cache_key", None)
 
-    with st.spinner("Building live market context and tutor recommendations..."):
+    with st.spinner("Reading the market and building the active-symbol case..."):
         sector_frame = get_sector_performance(fetch_if_missing=True)
         cache_key = f"{ticker}|{manual_internals}"
         cached_report = st.session_state.get("tutor_report_cache")
@@ -866,13 +1471,280 @@ def _trading_tutor() -> None:
             st.session_state.tutor_report_cache_key = cache_key
         report = st.session_state.tutor_report_cache
 
-    _render_tutor_market_snapshot(report)
-    _render_tutor_regime_conclusion(report)
-    _render_tutor_critical_paths(report)
-    _render_tutor_strategy_recommendations(report)
-    _render_tutor_checklist(report)
-    _render_tutor_rules(report)
-    _render_tutor_reference_library()
+    effective_regime, regime_status = _render_tutor_regime_dialogue(report)
+    user_profile = {
+        "owns_shares": owns_shares,
+        "horizon": horizon,
+        "bias": symbol_bias,
+        "risk_budget": risk_budget,
+        "target_pct": target_pct,
+        "stop_pct": stop_pct,
+        "catalyst": catalyst,
+        "catalyst_days": catalyst_days,
+    }
+    action_plan = build_tutor_action_plan(
+        report,
+        effective_regime=effective_regime,
+        user_profile=user_profile,
+    )
+    _render_tutor_symbol_case(report, action_plan)
+    _render_tutor_candidate_comparison(report, action_plan, provisional=regime_status == "reviewing")
+    _render_tutor_learning_close(report, action_plan)
+
+
+def _render_tutor_regime_dialogue(report: dict) -> tuple[str, str]:
+    """Let the learner inspect, confirm, or correct the tutor's market-regime read."""
+    regime = report["regime"]
+    snapshot = report["market_snapshot"]
+    model_regime = str(regime.get("primary", "Neutral / range-bound"))
+    score = int(regime.get("score", 0))
+    confidence = str(regime.get("confidence", "Low"))
+
+    st.markdown("#### 2 · Tutor diagnosis: what environment are we in?")
+    metric1, metric2, metric3, metric4 = st.columns(4)
+    with metric1:
+        st.metric("Tutor regime", model_regime)
+    with metric2:
+        st.metric("Confidence", confidence)
+    with metric3:
+        st.metric("Evidence score", f"{score:+d}")
+    with metric4:
+        st.metric("Symbol", str(report.get("ticker", "—")))
+
+    _render_tutor_suggestion(str(regime.get("summary", "")))
+    evidence = regime.get("breakdown", [])
+    if evidence:
+        positive = [item for item in evidence if int(item.get("impact", 0)) > 0]
+        negative = [item for item in evidence if int(item.get("impact", 0)) < 0]
+        neutral = [item for item in evidence if int(item.get("impact", 0)) == 0]
+        ecol1, ecol2, ecol3 = st.columns(3)
+        with ecol1:
+            st.markdown("**Supports risk-taking**")
+            for item in positive:
+                st.markdown(f"- {item.get('factor')}: {item.get('reading')}")
+            if not positive:
+                st.caption("No positive factor scored.")
+        with ecol2:
+            st.markdown("**Supports defense**")
+            for item in negative:
+                st.markdown(f"- {item.get('factor')}: {item.get('reading')}")
+            if not negative:
+                st.caption("No negative factor scored.")
+        with ecol3:
+            st.markdown("**Unresolved / neutral**")
+            for item in neutral:
+                st.markdown(f"- {item.get('factor')}: {item.get('reading')}")
+            internals = snapshot.get("internals", {})
+            if internals.get("manual_tick") is None:
+                st.caption("TICK not supplied.")
+            if internals.get("manual_trin") is None:
+                st.caption("TRIN not supplied.")
+
+    response = st.radio(
+        "Your response to the diagnosis",
+        ["Reviewing the tutor read", "I agree with the tutor", "I want to correct the regime"],
+        horizontal=True,
+        key="tutor_regime_response",
+    )
+    if response == "I want to correct the regime":
+        corrected = st.selectbox(
+            "Use this regime for the scenario comparison",
+            ["Risk-on", "Mildly bullish", "Neutral / range-bound", "Risk-off", "High volatility", "Event-driven"],
+            index=(
+                ["Risk-on", "Mildly bullish", "Neutral / range-bound", "Risk-off", "High volatility", "Event-driven"].index(
+                    model_regime
+                )
+                if model_regime
+                in ["Risk-on", "Mildly bullish", "Neutral / range-bound", "Risk-off", "High volatility", "Event-driven"]
+                else 2
+            ),
+            key="tutor_regime_override",
+        )
+        st.warning(
+            f"The tutor will rank scenarios using **{corrected}**, while preserving the original "
+            f"**{model_regime}** model read so the disagreement remains visible."
+        )
+        return corrected, "corrected"
+    if response == "I agree with the tutor":
+        st.success(f"Regime confirmed: **{model_regime}**.")
+        return model_regime, "confirmed"
+    st.caption("The comparison below is provisional until you confirm or correct the regime.")
+    return model_regime, "reviewing"
+
+
+def _render_tutor_symbol_case(report: dict, action_plan: dict) -> None:
+    """Explain the active symbol through technical, fundamental, and options evidence."""
+    symbol = report["symbol_context"]
+    technical = symbol.get("technical", {})
+    fundamental = symbol.get("fundamental", {})
+    options = symbol.get("options_kpis", {})
+    assessment = action_plan["symbol_assessment"]
+
+    st.markdown(f"#### 3 · Build the case for {symbol.get('ticker', 'the active symbol')}")
+    st.markdown(assessment.get("headline", ""))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**Technical condition**")
+        st.metric("Trend", str(technical.get("trend", "Unavailable")))
+        st.caption(
+            f"RSI(14) {technical.get('rsi14', 'n/a')} · "
+            f"1M {float(technical.get('month_return_pct', 0) or 0):+.2f}% · "
+            f"Relative volume {technical.get('relative_volume', 'n/a')}"
+        )
+        if technical.get("support_20d") is not None:
+            st.caption(
+                f"20D support \\${float(technical['support_20d']):.2f} · "
+                f"resistance \\${float(technical['resistance_20d']):.2f}"
+            )
+    with col2:
+        st.markdown("**Fundamental context**")
+        st.metric("Context", str(fundamental.get("label", "Unknown")))
+        st.caption(
+            f"P/E {fundamental.get('pe_ratio', 'n/a')} · PEG {fundamental.get('peg_ratio', 'n/a')} · "
+            f"Beta {fundamental.get('beta', 'n/a')}"
+        )
+        for note in fundamental.get("evidence", [])[:2]:
+            st.caption(f"✓ {note}")
+    with col3:
+        st.markdown("**Options condition**")
+        st.metric("IV context", str(symbol.get("iv_context", "Unknown")))
+        st.caption(
+            f"IV Rank {options.get('IV Rank', 'n/a')} · 30D IV {options.get('30D IV', 'n/a')}% · "
+            f"Put/Call OI {options.get('Put/Call Ratio', 'n/a')}"
+        )
+        if not symbol.get("options_available"):
+            st.warning("Options data is unavailable; options rankings have lower evidence quality.")
+
+    if assessment.get("risks"):
+        st.warning("Evidence to challenge: " + " ".join(str(item) for item in assessment["risks"]))
+    else:
+        st.success(str(assessment.get("alignment", "Evidence broadly aligned")))
+
+    with st.expander("Inspect all market and symbol evidence", expanded=False):
+        _render_tutor_market_snapshot(report)
+
+
+def _render_tutor_candidate_comparison(report: dict, action_plan: dict, *, provisional: bool) -> None:
+    """Render ranked structures as explainable hypotheses with simulator handoffs."""
+    ticker = str(report.get("ticker", "Symbol"))
+    st.markdown("#### 4 · Compare products—do not jump straight to one answer")
+    if provisional:
+        st.warning("These rankings are provisional because the regime diagnosis has not been confirmed or corrected.")
+    st.caption(
+        "Fit combines the effective regime, your symbol view, chart trend, IV context, share ownership, and catalyst risk. "
+        "Open each scenario and look for the assumption that would make it fail."
+    )
+
+    for rank, candidate in enumerate(action_plan.get("candidates", [])[:4], start=1):
+        label = f"#{rank} · {candidate['name']} — {candidate['fit_label']} ({candidate['score']}/100)"
+        with st.expander(label, expanded=rank == 1):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Educational fit", f"{candidate['score']}/100")
+            with c2:
+                st.metric("Expression", str(candidate.get("direction", "")).replace("_", " ").title())
+            with c3:
+                st.metric("Test in", str(candidate.get("simulator", "—")))
+
+            st.markdown(f"**What it is trying to accomplish:** {candidate.get('purpose', '')}")
+            st.markdown(
+                f"**Illustrative setup for {ticker}:** "
+                f"{_escape_markdown_math(candidate['setup']['structure'])}"
+            )
+            st.caption(_escape_markdown_math(candidate["setup"]["risk_note"]))
+
+            why_col, risk_col = st.columns(2)
+            with why_col:
+                st.markdown("**Why it moved up the ranking**")
+                for reason in candidate.get("reasons", []):
+                    st.markdown(_escape_markdown_math(f"- {reason}"))
+            with risk_col:
+                st.markdown("**What could invalidate it**")
+                for caution in candidate.get("cautions", []):
+                    st.markdown(_escape_markdown_math(f"- {caution}"))
+                if not candidate.get("cautions"):
+                    st.markdown("- No structural conflict found; price and execution risk still remain.")
+
+            st.markdown("**Three cases to test**")
+            scenario_cols = st.columns(3)
+            for scenario_col, scenario in zip(scenario_cols, candidate.get("scenario", [])):
+                with scenario_col:
+                    st.markdown(_escape_markdown_math(f"**{scenario['case']} · {scenario['price']}**"))
+                    st.caption(scenario["lesson"])
+
+            if st.button(
+                f"Test {candidate['name']} in {candidate['simulator']}",
+                key=f"tutor_test_{ticker}_{candidate['id']}",
+                type="primary" if rank == 1 else "secondary",
+                use_container_width=True,
+            ):
+                simulator = str(candidate["simulator"])
+                stock_defaults = None
+                if simulator == "Stock P&L simulator":
+                    stock_defaults = {
+                        "entry_price": candidate["setup"]["spot"],
+                        "direction": "Long stock" if candidate["direction"] != "bearish" else "Short stock",
+                    }
+                _queue_education_navigation(
+                    submenu=simulator,
+                    strategy_template=candidate.get("template"),
+                    option_defaults=candidate.get("option_defaults"),
+                    stock_defaults=stock_defaults,
+                    strategy_stock_price=(
+                        float(candidate["setup"]["spot"]) if simulator == "Strategy payoff lab" else None
+                    ),
+                    scroll_target=_education_sim_anchor_id(simulator),
+                )
+
+
+def _render_tutor_learning_close(report: dict, action_plan: dict) -> None:
+    """Close the coaching loop with a no-trade comparison and explicit validation."""
+    gate = action_plan.get("no_trade_gate", {})
+    st.markdown("#### 5 · Compare every idea with waiting")
+    gate_col, decision_col = st.columns([1, 2])
+    with gate_col:
+        st.metric("Wait / no-trade relevance", f"{gate.get('score', 0)}/100")
+        st.caption(str(gate.get("label", "")))
+    with decision_col:
+        for reason in gate.get("reasons", []):
+            st.markdown(f"- {reason}")
+        st.caption(
+            "Waiting is the benchmark. A candidate should beat it through clearer evidence—not through a higher desire to trade."
+        )
+
+    top_candidate = (action_plan.get("candidates") or [{}])[0]
+    ticker = str(report.get("ticker", "symbol"))
+    st.markdown(f"**Tutor debrief for {ticker}**")
+    wait_score = int(gate.get("score", 0) or 0)
+    candidate_score = int(top_candidate.get("score", 0) or 0)
+    if wait_score >= candidate_score:
+        st.markdown(
+            f"The strongest current conclusion is **wait / no trade** (**{wait_score}/100**). "
+            f"The first product to keep studying is **{top_candidate.get('name', 'none')}** "
+            f"(**{candidate_score}/100**) if the missing or conflicting evidence improves. "
+            "Before treating any scenario as actionable, verify all four statements:"
+        )
+    else:
+        st.markdown(
+            f"The first structure to **study**, not automatically trade, is **{top_candidate.get('name', 'none')}**. "
+            f"Its fit is **{candidate_score}/100** under the current assumptions. "
+            "Before treating it as actionable, verify all four statements:"
+        )
+    validations = [
+        "I can state the market regime and the evidence that could change it.",
+        f"I can state the {ticker} thesis, target, and invalidation level.",
+        "I know the maximum modeled loss, including size and fees.",
+        "I tested downside, flat, and upside cases in the simulator.",
+    ]
+    for index, validation in enumerate(validations):
+        st.checkbox(validation, key=f"tutor_validation_{ticker}_{index}")
+
+    with st.expander("Need theory or permanent rules?", expanded=False):
+        st.caption(
+            "The Lesson Library remains the reference. Return there only when a term, payoff, or risk rule in this live case is unclear."
+        )
+        if st.button("Open Lesson library", key=f"tutor_open_library_{ticker}", use_container_width=True):
+            _queue_education_navigation(submenu="Lesson library")
 
 
 def _render_tutor_market_snapshot(report: dict) -> None:
@@ -1476,13 +2348,25 @@ def _stock_pnl_simulator() -> None:
     """Render long/short stock P&L simulator."""
     anchor_id = _render_education_simulator_title("Stock P&L simulator", "Stock P&L simulator")
     _render_editable_assumption_note()
+    st.session_state.setdefault("stock_pnl_entry", 100.0)
+    st.session_state.setdefault("stock_pnl_direction", "Long stock")
     col1, col2, col3 = st.columns(3)
     with col1:
-        entry_price = st.number_input("Entry price", min_value=0.01, value=100.0, step=1.0)
+        entry_price = st.number_input(
+            "Entry price",
+            min_value=0.01,
+            step=1.0,
+            key="stock_pnl_entry",
+        )
     with col2:
         shares = st.number_input("Shares", min_value=1, value=100, step=10)
     with col3:
-        direction = st.radio("Position", ["Long stock", "Short stock"], horizontal=True)
+        direction = st.radio(
+            "Position",
+            ["Long stock", "Short stock"],
+            horizontal=True,
+            key="stock_pnl_direction",
+        )
 
     fee_col1, fee_col2 = st.columns(2)
     with fee_col1:
@@ -1772,6 +2656,7 @@ def _strategy_payoff_lab() -> None:
 
     ticker = st.session_state.selected_ticker
     _render_chain_defaults_loader(ticker, "strategy")
+    st.session_state.setdefault("strategy_stock_price", 100.0)
 
     pending_template = st.session_state.pop("education_strategy_template_banner", None)
     if pending_template:
@@ -1795,7 +2680,12 @@ def _strategy_payoff_lab() -> None:
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        stock_price = st.number_input("Current / stock entry price", min_value=0.01, value=100.0, step=1.0)
+        stock_price = st.number_input(
+            "Current / stock entry price",
+            min_value=0.01,
+            step=1.0,
+            key="strategy_stock_price",
+        )
     with col2:
         share_lot = st.number_input("Stock shares for stock-based templates", min_value=1, value=100, step=10)
     with col3:
@@ -2708,7 +3598,7 @@ def _render_strategy_option_pricing_notes(legs: list[dict], stock_entry_price: f
                         f"**${item['entry_model_per_share']:.2f}**. As a seller you are modeled as collecting less "
                         f"premium than the model by **${abs(item['pricing_gap_per_share']):.2f}** per share."
                     )
-                st.markdown(f"- **{item['leg']}:** {detail}")
+                st.markdown(_escape_markdown_math(f"- **{item['leg']}:** {detail}"))
         else:
             st.success("All option-leg premiums are reasonably close to the model values implied by strike, IV, DTE, and rates.")
 

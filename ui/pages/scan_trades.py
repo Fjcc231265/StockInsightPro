@@ -8,9 +8,12 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from analytics.technical.breakout_scan import BreakoutScanConfig, evaluate_breakout_setup, score_breakout_refinement
+from analytics.technical.going_up_scan import GoingUpScanConfig, evaluate_going_up_metrics
 from analytics.technical.pullback_scan import PullbackScanConfig, evaluate_pullback_setup, score_pullback_refinement
 from data.providers import alpha_vantage_provider
 from services.market_data_service import save_favorite_symbols
+from services.report_summary_service import GOING_UP, verify_going_up_symbols
 from services.universe_service import (
     get_stock_universe_symbols,
     import_stock_universe_csv,
@@ -22,11 +25,14 @@ from ui.components.page_router import render_submenu_page
 
 RSI_SCAN_RESULTS_FILE = Path(__file__).resolve().parents[2] / "data" / "rsi_scan_results.csv"
 PULLBACK_SCAN_RESULTS_FILE = Path(__file__).resolve().parents[2] / "data" / "pullback_scan_results.csv"
+BREAKOUT_SCAN_RESULTS_FILE = Path(__file__).resolve().parents[2] / "data" / "breakout_scan_results.csv"
+GOING_UP_SCAN_RESULTS_FILE = Path(__file__).resolve().parents[2] / "data" / "going_up_scan_results.csv"
 
 
 def render(submenu: str) -> None:
     """Route Scan Trades submenu."""
     handlers = {
+        "Going Up": _going_up_scan,
         "Bottom Phising": _bottom_phising,
         "Breakout scan": _breakout_scan,
         "Pullback scan": _pullback_scan,
@@ -36,17 +42,18 @@ def render(submenu: str) -> None:
         "Scan Trades",
         submenu,
         handlers,
-        default_handler=_bottom_phising,
+        default_handler=_going_up_scan,
         subtitle="Run technical scans against your symbol universe and shortlist trade ideas.",
     )
 
 
-def _bottom_phising() -> None:
-    """Screen symbols for low-to-high RSI bottom-fishing candidates."""
-    st.markdown("**Bottom Phising**")
+def _going_up_scan() -> None:
+    """Filter the symbol universe, then keep only Going Up report opinions in favorites."""
+    st.markdown("**Going Up**")
     st.caption(
-        "Three-stage bottom-fishing workflow: scan the symbol universe for low RSI, load details for favorites, "
-        "then score the shortlist with RSI, MACD, and ADX."
+        "Load price, volume, RSI, and distance-above-MA metrics for every symbol in the CSV. "
+        "Filter the universe, then verify technical / fundamental / options reports and keep "
+        "only Going Up symbols in favorites."
     )
 
     if not alpha_vantage_provider.is_configured():
@@ -59,11 +66,256 @@ def _bottom_phising() -> None:
     if not scan_symbols:
         return
 
-    st.markdown("#### Stage 1 — Add low-RSI symbols to favorites")
+    st.markdown("#### Stage 1 — Load universe metrics")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        rsi_period = st.number_input(
+            "RSI period",
+            min_value=2,
+            max_value=50,
+            value=9,
+            step=1,
+            key="going_up_rsi_period",
+        )
+    with col2:
+        pause_every = st.number_input(
+            "Pause after this many symbols",
+            min_value=25,
+            max_value=1000,
+            value=250,
+            step=25,
+            key="going_up_pause_every",
+        )
+    with col3:
+        pause_seconds = st.number_input(
+            "Pause duration in seconds",
+            min_value=0,
+            max_value=600,
+            value=0,
+            step=5,
+            key="going_up_pause_seconds",
+        )
+
+    scan_config = GoingUpScanConfig(rsi_period=int(rsi_period))
+    st.caption(
+        f"Ready to load metrics for **{len(scan_symbols)}** symbols. "
+        "Each symbol uses daily OHLC for price, volume, RSI, % above MA20, and % above MA40."
+    )
+
+    if st.button("Load Universe Metrics", type="primary", key="going_up_run_stage1"):
+        with st.spinner(f"Loading metrics for {len(scan_symbols)} symbols..."):
+            results, unavailable = _scan_universe_for_going_up_metrics(
+                scan_symbols,
+                scan_config,
+                pause_every=int(pause_every),
+                pause_seconds=int(pause_seconds),
+            )
+            st.session_state.going_up_scan_results = results
+            st.session_state.going_up_scan_unavailable = unavailable
+            st.session_state.pop("going_up_going_up_results", None)
+            if not results.empty:
+                GOING_UP_SCAN_RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                results.to_csv(GOING_UP_SCAN_RESULTS_FILE, index=False)
+            elapsed = results.attrs.get("elapsed_seconds", 0)
+            st.success(
+                f"Loaded metrics for {len(results)} of {len(scan_symbols)} symbols in {elapsed:.1f} seconds."
+            )
+            if not results.empty:
+                st.caption(f"Saved Going Up metrics to `{GOING_UP_SCAN_RESULTS_FILE}`.")
+
+    results = st.session_state.get("going_up_scan_results")
+    unavailable = st.session_state.get("going_up_scan_unavailable", pd.DataFrame())
+    if results is None or results.empty:
+        _render_unavailable_symbols(unavailable)
+        st.info("Load universe metrics to enable filters.")
+        return
+
+    _render_going_up_results(results)
+    _render_unavailable_symbols(unavailable)
+
+
+def _scan_universe_for_going_up_metrics(
+    symbols: list[str],
+    config: GoingUpScanConfig,
+    pause_every: int,
+    pause_seconds: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Collect Going Up filter metrics for every symbol in the universe."""
+    rows = []
+    unavailable_rows = []
+    progress = st.progress(0.0, text="Starting Going Up metrics scan...")
+    status = st.empty()
+    started_at = time.perf_counter()
+    update_every = max(25, min(100, len(symbols) // 20 or 25))
+
+    for index, symbol in enumerate(symbols):
+        if index == 0 or (index + 1) % update_every == 0 or index + 1 == len(symbols):
+            elapsed = time.perf_counter() - started_at
+            status.caption(
+                f"Checking {symbol} ({index + 1}/{len(symbols)}) · "
+                f"{len(rows)} loaded · {len(unavailable_rows)} unavailable · {elapsed:.1f}s"
+            )
+            progress.progress((index + 1) / len(symbols), text=f"Going Up metrics through {symbol}...")
+
+        try:
+            history = alpha_vantage_provider.get_price_history(
+                symbol,
+                periods=config.history_periods,
+                timeframe="Daily",
+            )
+            metrics = evaluate_going_up_metrics(history, config)
+        except Exception as exc:  # noqa: BLE001
+            unavailable_rows.append({"Symbol": symbol, "Reason": _short_unavailable_reason(str(exc))})
+            continue
+
+        if metrics is None:
+            unavailable_rows.append({"Symbol": symbol, "Reason": "Insufficient history for MA/RSI metrics"})
+            continue
+
+        metrics["Ticker"] = symbol
+        rows.append(metrics)
+
+        if pause_every > 0 and pause_seconds > 0 and (index + 1) % pause_every == 0 and index + 1 < len(symbols):
+            status.caption(
+                f"Paused after {index + 1} symbols for {pause_seconds} seconds to respect Alpha Vantage limits."
+            )
+            time.sleep(pause_seconds)
+
+    progress.empty()
+    status.empty()
+    if not rows:
+        frame = pd.DataFrame(rows)
+    else:
+        frame = (
+            pd.DataFrame(rows)
+            .sort_values(["% Above MA20", "% Above MA40", "RSI"], ascending=[False, False, False])
+            .reset_index(drop=True)
+        )
+    frame.attrs["elapsed_seconds"] = time.perf_counter() - started_at
+    return frame, pd.DataFrame(unavailable_rows)
+
+
+def _render_going_up_results(results: pd.DataFrame) -> None:
+    """Render price/volume/RSI/MA filters and Going Up report verification."""
+    st.markdown("#### Stage 2 — Filter by price, volume, RSI, and distance above MAs")
+
+    price_min = float(results["Price"].min())
+    price_max = float(results["Price"].max())
+    slider_max = price_max if price_max > price_min else price_min + 1.0
+    rsi_min = float(results["RSI"].min())
+    rsi_max = float(results["RSI"].max())
+    ma20_min = float(results["% Above MA20"].min())
+    ma20_max = float(results["% Above MA20"].max())
+    ma40_min = float(results["% Above MA40"].min())
+    ma40_max = float(results["% Above MA40"].max())
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        price_range = st.slider(
+            "Price range",
+            min_value=price_min,
+            max_value=slider_max,
+            value=(price_min, slider_max),
+            step=1.0,
+            key="going_up_price_range",
+        )
+    with col2:
+        rsi_range = st.slider(
+            "RSI range",
+            min_value=max(0.0, rsi_min),
+            max_value=min(100.0, max(rsi_max, rsi_min + 1)),
+            value=(max(0.0, rsi_min), min(100.0, max(rsi_max, rsi_min + 1))),
+            step=1.0,
+            key="going_up_rsi_range",
+        )
+    with col3:
+        min_volume = st.number_input(
+            "Minimum latest volume",
+            min_value=0,
+            value=0,
+            step=100_000,
+            key="going_up_min_volume",
+        )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        ma20_range = st.slider(
+            "% Above MA20",
+            min_value=min(ma20_min, -50.0),
+            max_value=max(ma20_max, 50.0),
+            value=(ma20_min, ma20_max if ma20_max > ma20_min else ma20_min + 0.1),
+            step=0.5,
+            key="going_up_ma20_range",
+        )
+    with col2:
+        ma40_range = st.slider(
+            "% Above MA40",
+            min_value=min(ma40_min, -50.0),
+            max_value=max(ma40_max, 50.0),
+            value=(ma40_min, ma40_max if ma40_max > ma40_min else ma40_min + 0.1),
+            step=0.5,
+            key="going_up_ma40_range",
+        )
+
+    filtered = results[
+        (results["Price"].between(price_range[0], price_range[1]))
+        & (results["RSI"].between(rsi_range[0], rsi_range[1]))
+        & (results["Volume"] >= min_volume)
+        & (results["% Above MA20"].between(ma20_range[0], ma20_range[1]))
+        & (results["% Above MA40"].between(ma40_range[0], ma40_range[1]))
+    ].reset_index(drop=True)
+
+    if filtered.empty:
+        st.warning("No symbols match the current filters.")
+        return
+
+    st.caption(f"Showing {len(filtered)} of {len(results)} symbols after filters.")
+    st.dataframe(
+        filtered,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Volume": st.column_config.NumberColumn("Volume", format="%d"),
+            "Avg Volume 20D": st.column_config.NumberColumn("Avg Volume 20D", format="%d"),
+            "RSI": st.column_config.NumberColumn("RSI", format="%.2f"),
+            "MA20": st.column_config.NumberColumn("MA20", format="$%.2f"),
+            "MA40": st.column_config.NumberColumn("MA40", format="$%.2f"),
+            "% Above MA20": st.column_config.NumberColumn("% Above MA20", format="%.2f%%"),
+            "% Above MA40": st.column_config.NumberColumn("% Above MA40", format="%.2f%%"),
+        },
+    )
+
+    _render_going_up_verification(
+        filtered,
+        key_prefix="going_up",
+        stage_label="Stage 3",
+    )
+
+
+def _bottom_phising() -> None:
+    """Screen symbols for low-to-high RSI bottom-fishing candidates."""
+    st.markdown("**Bottom Phising**")
+    st.caption(
+        "Four-stage bottom-fishing workflow: scan the universe for low RSI, filter by price/RSI/volume, "
+        "score the shortlist, then verify technical/fundamental/options reports and keep only Going Up in favorites."
+    )
+
+    if not alpha_vantage_provider.is_configured():
+        st.error("Alpha Vantage API key is required for live scans. Mock data is not used here.")
+        return
+
+    _render_universe_manager()
+
+    scan_symbols = _resolve_scan_universe()
+    if not scan_symbols:
+        return
+
+    st.markdown("#### Stage 1 — Scan for low-RSI candidates")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         rsi_limit = st.number_input(
-            "Add to favorites when RSI is <= ",
+            "Candidate when RSI is <= ",
             min_value=0.0,
             max_value=100.0,
             value=30.0,
@@ -105,7 +357,7 @@ def _bottom_phising() -> None:
         "This first pass calls only Alpha Vantage RSI, updates the UI in batches, and saves the full RSI table to disk."
     )
 
-    if st.button("Scan CSV RSI and Add to Favorites", type="primary", key="scan_bottom_run_stage1"):
+    if st.button("Scan CSV RSI for Candidates", type="primary", key="scan_bottom_run_stage1"):
         with st.spinner(f"Scanning RSI for {len(scan_symbols)} CSV symbols..."):
             candidates, unavailable, all_rsi = _scan_csv_for_rsi_candidates(
                 scan_symbols,
@@ -117,16 +369,16 @@ def _bottom_phising() -> None:
             if not all_rsi.empty:
                 RSI_SCAN_RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
                 all_rsi.to_csv(RSI_SCAN_RESULTS_FILE, index=False)
-            current_favorites = list(st.session_state.watchlist)
-            candidate_symbols = candidates["Ticker"].tolist() if not candidates.empty else []
-            st.session_state.watchlist = save_favorite_symbols([*current_favorites, *candidate_symbols])
             st.session_state.rsi_all_results = all_rsi
             st.session_state.rsi_candidate_results = candidates
             st.session_state.rsi_screener_unavailable = unavailable
+            st.session_state.pop("rsi_screener_results", None)
+            st.session_state.pop("rsi_stage3_scores", None)
+            st.session_state.pop("scan_bottom_going_up_results", None)
             elapsed = all_rsi.attrs.get("elapsed_seconds", 0)
             st.success(
-                f"Added {len([symbol for symbol in candidate_symbols if symbol not in current_favorites])} "
-                f"new symbols to favorites from {len(candidates)} RSI matches. "
+                f"Found {len(candidates)} RSI candidates at or below {rsi_limit:.0f}. "
+                f"Favorites are not updated yet — that happens after the Going Up verification. "
                 f"RSI pass completed in {elapsed:.1f} seconds."
             )
             if not all_rsi.empty:
@@ -155,19 +407,31 @@ def _bottom_phising() -> None:
     _render_unavailable_symbols(unavailable)
 
     st.divider()
-    st.markdown("#### Stage 2 — Load details for favorites")
-    st.caption(f"Favorites available for details: **{len(st.session_state.watchlist)}**")
-    if st.button("Load Favorite Details", key="scan_bottom_run_stage2"):
-        with st.spinner(f"Loading quote, RSI, exchange, volume, and sector for {len(st.session_state.watchlist)} favorites..."):
-            results, detail_unavailable = _load_favorite_details(st.session_state.watchlist, time_period=int(rsi_period))
+    st.markdown("#### Stage 2 — Load candidate details and filter")
+    candidate_symbols = (
+        candidates["Ticker"].tolist()
+        if candidates is not None and not candidates.empty
+        else []
+    )
+    st.caption(f"RSI candidates available for details: **{len(candidate_symbols)}**")
+    if st.button("Load Candidate Details", key="scan_bottom_run_stage2", disabled=not candidate_symbols):
+        with st.spinner(
+            f"Loading quote, RSI, exchange, volume, and sector for {len(candidate_symbols)} candidates..."
+        ):
+            results, detail_unavailable = _load_favorite_details(
+                candidate_symbols,
+                time_period=int(rsi_period),
+            )
             st.session_state.rsi_screener_results = results
             st.session_state.rsi_favorite_detail_unavailable = detail_unavailable
+            st.session_state.pop("rsi_stage3_scores", None)
+            st.session_state.pop("scan_bottom_going_up_results", None)
 
     screener = st.session_state.get("rsi_screener_results")
     detail_unavailable = st.session_state.get("rsi_favorite_detail_unavailable", pd.DataFrame())
     if screener is None or screener.empty:
         _render_unavailable_symbols(detail_unavailable)
-        st.info("Load favorite details to populate the filtered table.")
+        st.info("Load candidate details to populate the price / RSI / volume filters.")
         return
 
     _render_screener_results(screener)
@@ -175,22 +439,423 @@ def _bottom_phising() -> None:
 
 
 def _breakout_scan() -> None:
-    """Placeholder for breakout-style scans."""
+    """Scan for closes above the prior N-day high with expanding volume and momentum."""
     st.markdown("**Breakout scan**")
-    st.caption("Find symbols breaking above resistance with expanding volume and constructive momentum.")
-    st.info(
-        "Planned criteria: price above recent resistance or 20/40-day moving averages, "
-        "volume above its 20-day average, RSI between 55 and 75, and MACD histogram turning positive."
+    st.caption(
+        "Find symbols closing above the prior lookback high with expanding volume. "
+        "Stage 1 detects the breakout; Stage 2 filters by price/RSI/volume; Stage 3 refines; "
+        "Stage 4 verifies reports and keeps only Going Up in favorites."
     )
-    st.markdown(
-        """
-**Example workflow (coming next)**
 
-1. Scan the symbol CSV for closes above the prior 20-day high.
-2. Require volume at least 1.5x the 20-day average.
-3. Filter by sector and minimum price.
-4. Rank by relative volume and distance above breakout level.
-"""
+    if not alpha_vantage_provider.is_configured():
+        st.error("Alpha Vantage API key is required for live scans. Mock data is not used here.")
+        return
+
+    _render_universe_manager()
+
+    scan_symbols = _resolve_scan_universe()
+    if not scan_symbols:
+        return
+
+    st.markdown("#### Scan settings")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        rsi_period = st.number_input("RSI period", min_value=2, max_value=50, value=9, step=1, key="breakout_rsi_period")
+        breakout_lookback = st.number_input(
+            "Prior high lookback (days)",
+            min_value=10,
+            max_value=60,
+            value=20,
+            step=1,
+            key="breakout_lookback",
+        )
+    with col2:
+        min_volume_multiple = st.number_input(
+            "Minimum volume vs 20D avg",
+            min_value=1.0,
+            max_value=5.0,
+            value=1.5,
+            step=0.1,
+            key="breakout_min_volume_multiple",
+        )
+        require_above_mas = st.checkbox(
+            "Require price above MA20 and MA40",
+            value=True,
+            key="breakout_require_above_mas",
+        )
+    with col3:
+        rsi_min = st.number_input(
+            "Preferred RSI min",
+            min_value=40.0,
+            max_value=80.0,
+            value=55.0,
+            step=1.0,
+            key="breakout_rsi_min",
+        )
+        rsi_max = st.number_input(
+            "Preferred RSI max",
+            min_value=50.0,
+            max_value=90.0,
+            value=75.0,
+            step=1.0,
+            key="breakout_rsi_max",
+        )
+    with col4:
+        pause_every = st.number_input(
+            "Pause after this many symbols",
+            min_value=25,
+            max_value=1000,
+            value=250,
+            step=25,
+            key="breakout_pause_every",
+        )
+        pause_seconds = st.number_input(
+            "Pause duration in seconds",
+            min_value=0,
+            max_value=600,
+            value=0,
+            step=5,
+            key="breakout_pause_seconds",
+        )
+
+    scan_config = BreakoutScanConfig(
+        rsi_period=int(rsi_period),
+        breakout_lookback=int(breakout_lookback),
+        min_volume_multiple=float(min_volume_multiple),
+        rsi_min=float(rsi_min),
+        rsi_max=float(rsi_max),
+        require_above_mas=require_above_mas,
+    )
+
+    st.caption(
+        f"Ready to scan **{len(scan_symbols)}** symbols. "
+        "Each symbol uses daily OHLC to test a close above the prior lookback high, volume expansion, and MA structure."
+    )
+
+    if st.button("Run Breakout Scan", type="primary", key="breakout_run_scan"):
+        with st.spinner(f"Scanning breakouts across {len(scan_symbols)} symbols..."):
+            results, unavailable = _scan_universe_for_breakouts(
+                scan_symbols,
+                scan_config,
+                pause_every=int(pause_every),
+                pause_seconds=int(pause_seconds),
+            )
+            st.session_state.breakout_scan_results = results
+            st.session_state.breakout_scan_unavailable = unavailable
+            st.session_state.pop("breakout_refined_results", None)
+            st.session_state.pop("breakout_going_up_results", None)
+            if not results.empty:
+                BREAKOUT_SCAN_RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                results.to_csv(BREAKOUT_SCAN_RESULTS_FILE, index=False)
+            elapsed = results.attrs.get("elapsed_seconds", 0)
+            st.success(
+                f"Found {len(results)} breakout matches out of {len(scan_symbols)} symbols in {elapsed:.1f} seconds."
+            )
+            if not results.empty:
+                st.caption(f"Saved breakout scan to `{BREAKOUT_SCAN_RESULTS_FILE}`.")
+
+    results = st.session_state.get("breakout_scan_results")
+    unavailable = st.session_state.get("breakout_scan_unavailable", pd.DataFrame())
+    if results is None or results.empty:
+        _render_unavailable_symbols(unavailable)
+        st.info("Run the breakout scan to populate matches.")
+        return
+
+    _render_breakout_results(results)
+    _render_unavailable_symbols(unavailable)
+
+
+def _scan_universe_for_breakouts(
+    symbols: list[str],
+    config: BreakoutScanConfig,
+    pause_every: int,
+    pause_seconds: int,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Scan the symbol universe for breakout setups."""
+    rows = []
+    unavailable_rows = []
+    progress = st.progress(0.0, text="Starting breakout scan...")
+    status = st.empty()
+    started_at = time.perf_counter()
+    update_every = max(25, min(100, len(symbols) // 20 or 25))
+
+    for index, symbol in enumerate(symbols):
+        if index == 0 or (index + 1) % update_every == 0 or index + 1 == len(symbols):
+            elapsed = time.perf_counter() - started_at
+            status.caption(
+                f"Checking {symbol} ({index + 1}/{len(symbols)}) · "
+                f"{len(rows)} matches · {len(unavailable_rows)} unavailable · {elapsed:.1f}s"
+            )
+            progress.progress((index + 1) / len(symbols), text=f"Breakout scan through {symbol}...")
+
+        try:
+            history = alpha_vantage_provider.get_price_history(
+                symbol,
+                periods=config.history_periods,
+                timeframe="Daily",
+            )
+            metrics = evaluate_breakout_setup(history, config)
+        except Exception as exc:  # noqa: BLE001
+            unavailable_rows.append({"Symbol": symbol, "Reason": _short_unavailable_reason(str(exc))})
+            continue
+
+        if metrics is None:
+            continue
+
+        metrics["Ticker"] = symbol
+        rows.append(metrics)
+
+        if pause_every > 0 and pause_seconds > 0 and (index + 1) % pause_every == 0 and index + 1 < len(symbols):
+            status.caption(
+                f"Paused after {index + 1} symbols for {pause_seconds} seconds to respect Alpha Vantage limits."
+            )
+            time.sleep(pause_seconds)
+
+    progress.empty()
+    status.empty()
+    if not rows:
+        frame = pd.DataFrame(rows)
+    else:
+        frame = (
+            pd.DataFrame(rows)
+            .sort_values(
+                ["Total Score", "Volume Multiple", "Distance Above Resistance %"],
+                ascending=[False, False, False],
+            )
+            .reset_index(drop=True)
+        )
+    frame.attrs["elapsed_seconds"] = time.perf_counter() - started_at
+    return frame, pd.DataFrame(unavailable_rows)
+
+
+def _render_breakout_results(results: pd.DataFrame) -> None:
+    """Render breakout filters, refinement scoring, and Going Up verification."""
+    st.markdown("#### Stage 2 — Filter by price, RSI, and volume")
+    price_min = float(results["Price"].min())
+    price_max = float(results["Price"].max())
+    slider_max = price_max if price_max > price_min else price_min + 1.0
+    rsi_min = float(results["RSI"].min())
+    rsi_max = float(results["RSI"].max())
+    setup_types = sorted(results["Setup Type"].dropna().unique().tolist())
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        price_range = st.slider(
+            "Price range",
+            min_value=price_min,
+            max_value=slider_max,
+            value=(price_min, slider_max),
+            step=1.0,
+            key="breakout_price_range",
+        )
+    with col2:
+        rsi_range = st.slider(
+            "RSI range",
+            min_value=max(0.0, rsi_min),
+            max_value=min(100.0, max(rsi_max, rsi_min + 1)),
+            value=(max(0.0, rsi_min), min(100.0, max(rsi_max, rsi_min + 1))),
+            step=1.0,
+            key="breakout_rsi_range",
+        )
+    with col3:
+        min_volume = st.number_input(
+            "Minimum latest volume",
+            min_value=0,
+            value=0,
+            step=100_000,
+            key="breakout_min_volume",
+        )
+    with col4:
+        min_volume_multiple = st.number_input(
+            "Minimum volume multiple",
+            min_value=1.0,
+            max_value=5.0,
+            value=1.5,
+            step=0.1,
+            key="breakout_filter_volume_multiple",
+        )
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        min_pattern_score = st.slider(
+            "Minimum pattern score",
+            min_value=0,
+            max_value=65,
+            value=40,
+            step=5,
+            key="breakout_min_pattern_score",
+        )
+    with col2:
+        setup_filter = st.multiselect(
+            "Setup type",
+            options=setup_types,
+            default=setup_types,
+            key="breakout_setup_filter",
+        )
+    with col3:
+        above_mas_only = st.checkbox("Above MAs only", value=False, key="breakout_above_mas_only")
+    with col4:
+        rsi_band_only = st.checkbox("RSI in breakout band only", value=False, key="breakout_rsi_band_only")
+
+    filtered = results[
+        (results["Price"].between(price_range[0], price_range[1]))
+        & (results["RSI"].between(rsi_range[0], rsi_range[1]))
+        & (results["Volume"] >= min_volume)
+        & (results["Volume Multiple"] >= min_volume_multiple)
+        & (results["Pattern Score"] >= min_pattern_score)
+    ]
+    if setup_filter:
+        filtered = filtered[filtered["Setup Type"].isin(setup_filter)]
+    if above_mas_only:
+        filtered = filtered[filtered["Above MAs"]]
+    if rsi_band_only:
+        filtered = filtered[filtered["RSI In Breakout Band"]]
+
+    filtered = filtered.reset_index(drop=True)
+    if filtered.empty:
+        st.warning("No symbols match the current filters.")
+        return
+
+    st.caption(f"Showing {len(filtered)} of {len(results)} breakout matches.")
+
+    st.markdown("#### Stage 3 — Refine with MACD, ADX, and RSI")
+    refine_col1, refine_col2, refine_col3 = st.columns(3)
+    with refine_col1:
+        refinement_rsi_min = st.number_input(
+            "Refinement RSI min",
+            min_value=0.0,
+            max_value=100.0,
+            value=55.0,
+            step=1.0,
+            key="breakout_refine_rsi_min",
+        )
+    with refine_col2:
+        refinement_rsi_max = st.number_input(
+            "Refinement RSI max",
+            min_value=0.0,
+            max_value=100.0,
+            value=80.0,
+            step=1.0,
+            key="breakout_refine_rsi_max",
+        )
+    with refine_col3:
+        min_total_score = st.slider(
+            "Minimum total score after refinement",
+            min_value=0,
+            max_value=100,
+            value=70,
+            step=5,
+            key="breakout_min_total_score",
+        )
+
+    refine_config = BreakoutScanConfig(
+        refinement_rsi_min=float(refinement_rsi_min),
+        refinement_rsi_max=float(refinement_rsi_max),
+    )
+
+    if st.button("Refine & Score Filtered Shortlist", type="primary", key="breakout_refine_score"):
+        with st.spinner(f"Refining {len(filtered)} symbols with MACD, ADX, and RSI..."):
+            st.session_state.breakout_refined_results = _score_breakout_refinements(filtered, refine_config)
+            st.session_state.pop("breakout_going_up_results", None)
+
+    display_source = st.session_state.get("breakout_refined_results")
+    if display_source is not None and not display_source.empty:
+        display_frame = display_source[display_source["Total Score"] >= min_total_score].reset_index(drop=True)
+        st.caption(
+            "Refinement adds up to 40 points: MACD positive turn (15), ADX rising (15), RSI momentum zone (10)."
+        )
+    else:
+        display_frame = filtered
+        st.info(
+            "Run Stage 3 refinement to add MACD, ADX, and RSI scoring, "
+            "or verify Going Up on the filtered shortlist directly."
+        )
+
+    if display_frame.empty:
+        st.warning("No symbols remain after the total-score threshold.")
+        return
+
+    display = display_frame.copy()
+    for column in ("Above MAs", "RSI In Breakout Band", "MACD Positive Turn", "ADX Rising", "RSI Momentum Zone"):
+        if column in display.columns and display[column].dtype == bool:
+            display[column] = display[column].map({True: "Yes", False: "No"})
+
+    st.dataframe(
+        display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Change %": st.column_config.NumberColumn("Change %", format="%.2f%%"),
+            "Volume": st.column_config.NumberColumn("Volume", format="%d"),
+            "Avg Volume 20D": st.column_config.NumberColumn("Avg Volume 20D", format="%d"),
+            "Volume Multiple": st.column_config.NumberColumn("Volume Multiple", format="%.2f"),
+            "RSI": st.column_config.NumberColumn("RSI", format="%.2f"),
+            "MA20": st.column_config.NumberColumn("MA20", format="$%.2f"),
+            "MA40": st.column_config.NumberColumn("MA40", format="$%.2f"),
+            "Resistance": st.column_config.NumberColumn("Resistance", format="$%.2f"),
+            "Distance Above Resistance %": st.column_config.NumberColumn(
+                "Distance Above Resistance %",
+                format="%.2f%%",
+            ),
+            "Pattern Score": st.column_config.NumberColumn("Pattern Score", format="%d"),
+            "Refinement Score": st.column_config.NumberColumn("Refinement Score", format="%d"),
+            "Total Score": st.column_config.NumberColumn("Total Score", format="%d"),
+            "MACD": st.column_config.NumberColumn("MACD", format="%.4f"),
+            "MACD Signal": st.column_config.NumberColumn("MACD Signal", format="%.4f"),
+            "MACD Hist": st.column_config.NumberColumn("MACD Hist", format="%.4f"),
+            "ADX": st.column_config.NumberColumn("ADX", format="%.2f"),
+        },
+    )
+
+    _render_going_up_verification(
+        display_frame,
+        key_prefix="breakout",
+        stage_label="Stage 4",
+    )
+
+
+def _score_breakout_refinements(filtered: pd.DataFrame, config: BreakoutScanConfig) -> pd.DataFrame:
+    """Score filtered breakout matches with MACD, ADX, and RSI refinement."""
+    rows = []
+    progress = st.progress(0.0, text="Starting breakout refinement...")
+    status = st.empty()
+
+    for index, row in filtered.reset_index(drop=True).iterrows():
+        symbol = row["Ticker"]
+        status.caption(f"Refining {symbol} ({index + 1}/{len(filtered)})")
+        progress.progress((index + 1) / len(filtered), text=f"Refining {symbol}...")
+
+        try:
+            history = alpha_vantage_provider.get_price_history(
+                symbol,
+                periods=config.history_periods,
+                timeframe="Daily",
+            )
+            refined = score_breakout_refinement(history, row.to_dict(), config)
+        except Exception as exc:  # noqa: BLE001
+            refined = {
+                **row.to_dict(),
+                "Refinement Score": 0,
+                "Total Score": int(row.get("Pattern Score", 0) or 0),
+                "MACD Positive Turn": False,
+                "ADX Rising": False,
+                "RSI Momentum Zone": False,
+                "Stage 3 Notes": _short_unavailable_reason(str(exc)),
+            }
+        rows.append(refined)
+
+    progress.empty()
+    status.empty()
+    if not rows:
+        return pd.DataFrame(rows)
+    return (
+        pd.DataFrame(rows)
+        .sort_values(
+            ["Total Score", "Volume Multiple", "Distance Above Resistance %"],
+            ascending=[False, False, False],
+        )
+        .reset_index(drop=True)
     )
 
 
@@ -199,7 +864,8 @@ def _pullback_scan() -> None:
     st.markdown("**Pullback scan**")
     st.caption(
         "Find uptrend pullbacks into the 20/40 MA zone or sideways names retesting support. "
-        "Stage 1 detects the pattern; Stage 2 filters; Stage 3 refines with MACD, ADX, and RSI."
+        "Stage 1 detects the pattern; Stage 2 filters by price/RSI/volume; Stage 3 refines; "
+        "Stage 4 verifies reports and keeps only Going Up in favorites."
     )
 
     if not alpha_vantage_provider.is_configured():
@@ -308,6 +974,8 @@ def _pullback_scan() -> None:
             )
             st.session_state.pullback_scan_results = results
             st.session_state.pullback_scan_unavailable = unavailable
+            st.session_state.pop("pullback_refined_results", None)
+            st.session_state.pop("pullback_going_up_results", None)
             if not results.empty:
                 PULLBACK_SCAN_RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
                 results.to_csv(PULLBACK_SCAN_RESULTS_FILE, index=False)
@@ -387,7 +1055,7 @@ def _scan_universe_for_pullbacks(
 
 def _render_pullback_results(results: pd.DataFrame) -> None:
     """Render pullback scan filters, refinement scoring, and ranked shortlist."""
-    st.markdown("#### Stage 2 — Filter pullback matches")
+    st.markdown("#### Stage 2 — Filter by price, RSI, and volume")
     price_min = float(results["Price"].min())
     price_max = float(results["Price"].max())
     slider_max = price_max if price_max > price_min else price_min + 1.0
@@ -529,6 +1197,7 @@ def _render_pullback_results(results: pd.DataFrame) -> None:
     if st.button("Refine & Score Filtered Shortlist", type="primary", key="pullback_refine_score"):
         with st.spinner(f"Refining {len(filtered)} symbols with MACD, ADX, and RSI..."):
             st.session_state.pullback_refined_results = _score_pullback_refinements(filtered, refine_config)
+            st.session_state.pop("pullback_going_up_results", None)
 
     display_source = st.session_state.get("pullback_refined_results")
     if display_source is not None and not display_source.empty:
@@ -538,7 +1207,10 @@ def _render_pullback_results(results: pd.DataFrame) -> None:
         )
     else:
         display_frame = filtered
-        st.info("Run Stage 3 refinement to add MACD, ADX, and RSI scoring to the filtered shortlist.")
+        st.info(
+            "Run Stage 3 refinement to add MACD, ADX, and RSI scoring, "
+            "or verify Going Up on the filtered shortlist directly."
+        )
 
     if display_frame.empty:
         st.warning("No symbols remain after the total-score threshold.")
@@ -586,16 +1258,11 @@ def _render_pullback_results(results: pd.DataFrame) -> None:
             "which can strengthen the reversal case."
         )
 
-    add_symbols = st.multiselect(
-        "Add filtered symbols to favorites",
-        options=display_frame["Ticker"].tolist(),
-        default=[],
-        key="pullback_add_favorites",
+    _render_going_up_verification(
+        display_frame,
+        key_prefix="pullback",
+        stage_label="Stage 4",
     )
-    if st.button("Add Selected to Favorites", disabled=not add_symbols, key="pullback_save_favorites"):
-        current_favorites = list(st.session_state.watchlist)
-        st.session_state.watchlist = save_favorite_symbols([*current_favorites, *add_symbols])
-        st.success(f"Added {len(add_symbols)} symbol(s) to favorites.")
 
 
 def _score_pullback_refinements(filtered: pd.DataFrame, config: PullbackScanConfig) -> pd.DataFrame:
@@ -645,14 +1312,108 @@ def _volume_surge_scan() -> None:
     )
     st.markdown(
         """
-**Example workflow (coming next)**
+**Planned workflow (same final gate as other scans)**
 
 1. Compare latest volume to the 20-day average.
-2. Filter out illiquid symbols below a minimum average volume.
-3. Require a minimum absolute or percentage price move.
-4. Rank by volume ratio and price change together.
+2. Filter by **price**, **RSI**, and **volume**.
+3. Rank by volume ratio and price change together.
+4. Verify technical / fundamental / options reports and keep **only Going Up** symbols in favorites.
 """
     )
+    st.warning("Volume surge scan is not live yet. Use Bottom Phising or Pullback scan for the full filter + Going Up workflow.")
+
+
+def _render_going_up_verification(
+    shortlist: pd.DataFrame,
+    *,
+    key_prefix: str,
+    stage_label: str = "Final stage",
+) -> None:
+    """Verify filtered symbols with combined reports and keep only Going Up in favorites."""
+    st.markdown(f"#### {stage_label} — Verify reports and keep only Going Up")
+    st.caption(
+        "Runs the same technical + fundamental + options wrap-up used in Reports. "
+        f"Favorites are replaced with symbols whose overall opinion is **{GOING_UP}**."
+    )
+
+    if shortlist is None or shortlist.empty or "Ticker" not in shortlist.columns:
+        st.info("No filtered shortlist is available for report verification.")
+        return
+
+    symbols = [str(symbol).upper() for symbol in shortlist["Ticker"].tolist() if str(symbol).strip()]
+    symbols = list(dict.fromkeys(symbols))
+    if not symbols:
+        st.info("No tickers remain in the filtered shortlist.")
+        return
+
+    st.caption(f"Ready to verify **{len(symbols)}** filtered symbol(s).")
+    result_key = f"{key_prefix}_going_up_results"
+    if st.button(
+        f"Verify reports and keep Going Up only ({len(symbols)})",
+        type="primary",
+        key=f"{key_prefix}_verify_going_up",
+    ):
+        progress = st.progress(0.0, text="Starting Going Up verification...")
+        status = st.empty()
+        rows = []
+        going_up: list[str] = []
+        for index, symbol in enumerate(symbols):
+            status.caption(f"Verifying {symbol} ({index + 1}/{len(symbols)})")
+            progress.progress((index + 1) / len(symbols), text=f"Verifying {symbol}...")
+            batch_rows, batch_going_up = verify_going_up_symbols([symbol])
+            rows.extend(batch_rows)
+            going_up.extend(batch_going_up)
+        progress.empty()
+        status.empty()
+
+        results = pd.DataFrame(rows)
+        if not results.empty:
+            direction_rank = {
+                GOING_UP: 0,
+                "Sideways": 1,
+                "Going down": 2,
+                "Unavailable": 3,
+            }
+            results["_rank"] = results["Direction"].map(direction_rank).fillna(9)
+            results = results.sort_values(["_rank", "Score"], ascending=[True, False]).drop(columns=["_rank"])
+            results = results.reset_index(drop=True)
+
+        st.session_state[result_key] = {
+            "results": results,
+            "going_up": going_up,
+        }
+        st.session_state.watchlist = save_favorite_symbols(going_up)
+        if going_up:
+            st.success(
+                f"Kept **{len(going_up)}** Going Up symbol(s) in favorites: {', '.join(going_up)}."
+            )
+        else:
+            st.warning(
+                "No filtered symbols have an overall report opinion of Going Up. "
+                "Favorites were cleared for this verification pass."
+            )
+
+    payload = st.session_state.get(result_key)
+    if not isinstance(payload, dict):
+        return
+
+    results = payload.get("results")
+    going_up = payload.get("going_up", [])
+    if results is None or getattr(results, "empty", True):
+        return
+
+    st.dataframe(
+        results,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Score": st.column_config.NumberColumn("Score", format="%+.1f"),
+        },
+    )
+    if going_up:
+        st.caption(f"Current favorites after verification: {', '.join(going_up)}")
+    else:
+        st.caption("Current favorites after verification: none (no Going Up matches).")
 
 
 def _render_universe_manager() -> None:
@@ -707,7 +1468,8 @@ def _resolve_scan_universe() -> list[str]:
 
 
 def _render_screener_results(screener: pd.DataFrame) -> None:
-    """Render post-scan filters and the top 20 lowest-RSI matches."""
+    """Render post-scan filters, scoring, and Going Up report verification."""
+    st.markdown("#### Stage 2 filters — Price, RSI, and volume")
     price_min = float(screener["Price"].min())
     price_max = float(screener["Price"].max())
     slider_max = price_max if price_max > price_min else price_min + 1.0
@@ -799,6 +1561,7 @@ def _render_screener_results(screener: pd.DataFrame) -> None:
                 filtered.reset_index(drop=True),
                 max_rsi=float(max_rsi),
             )
+            st.session_state.pop("scan_bottom_going_up_results", None)
 
     scored = st.session_state.get("rsi_stage3_scores")
     if scored is not None and not scored.empty:
@@ -819,6 +1582,16 @@ def _render_screener_results(screener: pd.DataFrame) -> None:
                 "MACD Hist": st.column_config.NumberColumn("MACD Hist", format="%.4f"),
             },
         )
+        verification_source = scored
+    else:
+        verification_source = selected
+        st.info("Optional: run Stage 3 scoring before the Going Up report check, or verify the current filtered shortlist directly.")
+
+    _render_going_up_verification(
+        verification_source,
+        key_prefix="scan_bottom",
+        stage_label="Stage 4",
+    )
 
 
 def _scan_csv_for_rsi_candidates(

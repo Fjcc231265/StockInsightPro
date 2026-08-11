@@ -6,6 +6,13 @@
       "order": 1,
       "title": "Stock market foundations",
       "summary": "Start with why long-term investing can work, then learn what moves prices, how to read chart structure, and how to control risk before using options.",
+      "chapter_goal": "Build a repeatable process for reading market evidence and protecting capital before choosing any trade.",
+      "objectives": [
+        "Explain how expectations, capital flows, sentiment, and fundamentals interact to move price.",
+        "Combine support and resistance, candles, volume, trend, moving averages, and market internals into one market read.",
+        "Define position size, maximum loss, and invalidation before committing capital."
+      ],
+      "checkpoint": "Annotate one chart with trend, two important zones, volume evidence, market-internal context, and a position-size decision.",
       "focus": [
         "Why productive economies and companies can compound wealth over long periods, even through recessions and bear markets.",
         "How prices react to expectations, capital flows, sentiment, and institutional positioning.",
@@ -30,6 +37,13 @@
       "order": 2,
       "title": "Options contracts and quotes",
       "summary": "Calls, puts, strikes, expirations, contract sizing, and how to read an option chain.",
+      "chapter_goal": "Understand the legal and economic mechanics of an option before using it as a trading instrument.",
+      "objectives": [
+        "Distinguish the rights of option buyers from the obligations and assignment risk accepted by sellers.",
+        "Translate strike, expiration, premium, and the 100-share multiplier into real dollar exposure.",
+        "Read an option quote and choose precise opening, closing, limit, and combo-order language."
+      ],
+      "checkpoint": "Read one option-chain row aloud as a complete trade ticket, including action, contract, expiration, strike, premium, liquidity, and dollar risk.",
       "focus": [
         "Understand the contract mechanics before studying pricing.",
         "Read bid/ask, volume, open interest, and order types as real trading frictions."
@@ -52,6 +66,13 @@
       "order": 3,
       "title": "Pricing and Greeks",
       "summary": "What drives premium after the Greek basics: intrinsic value, time value, implied volatility, moneyness, rates, and dividends.",
+      "chapter_goal": "Understand why option value changes before expiration—even when the directional thesis is correct.",
+      "objectives": [
+        "Decompose option premium into intrinsic and extrinsic value and calculate expiration value.",
+        "Use implied volatility and the Greeks to explain directional, time-decay, and volatility exposure.",
+        "Choose ITM, ATM, or OTM strikes according to probability, leverage, break-even, and thesis timing."
+      ],
+      "checkpoint": "Compare three strikes for the same thesis and justify which one offers the best balance of delta, premium, time, and required move.",
       "focus": [
         "Separate intrinsic value from time value.",
         "Use IV, moneyness, rates, and dividends to understand why an option can gain or lose even when direction is right."
@@ -71,6 +92,13 @@
       "order": 4,
       "title": "Market regime framework",
       "summary": "Match your idea to the environment: bullish, bearish, sideways, or high volatility.",
+      "chapter_goal": "Diagnose the environment first, then select a structure and position size that can survive it.",
+      "objectives": [
+        "Classify the market as risk-on, neutral, risk-off, or event-driven using trend, volatility, breadth, and flow.",
+        "Judge implied volatility relative to the symbol's own history and expected catalyst.",
+        "Decide when to buy premium, sell defined-risk premium, hedge, reduce size, or wait."
+      ],
+      "checkpoint": "Label the current regime with four pieces of evidence and identify one suitable structure, one unsuitable structure, and the reason for each.",
       "focus": [
         "Start with market environment before selecting a strategy.",
         "Use volatility, IV classification, and regime maps to decide whether to buy premium, sell premium, hedge, or wait."
@@ -91,6 +119,13 @@
       "order": 5,
       "title": "Core stock and option strategies",
       "summary": "Income, protection, spreads, and range trades with defined risk.",
+      "chapter_goal": "Choose a payoff structure deliberately instead of defaulting to stock or a single long option.",
+      "objectives": [
+        "Calculate maximum gain, maximum loss, break-even, and capital required for each core structure.",
+        "Match stock, calls, puts, spreads, income trades, and volatility trades to a specific thesis and regime.",
+        "Use payoff diagrams and scenario tests to compare probability, leverage, protection, and opportunity cost."
+      ],
+      "checkpoint": "Model two structures for the same thesis and defend which one offers the more appropriate payoff and risk.",
       "focus": [
         "Compare stock ownership with option leverage.",
         "Use payoff diagrams to understand max gain, max loss, break-even, and when each structure fits."
@@ -114,6 +149,13 @@
       "order": 6,
       "title": "Stock plus options structures",
       "summary": "Combine shares with options for hedging, income, and leveraged directional exposure.",
+      "chapter_goal": "Construct multi-leg positions in which every stock or option leg has a clear purpose.",
+      "objectives": [
+        "Explain the job of every leg in collars, diagonals, stock-plus-spread positions, and LEAPS structures.",
+        "Evaluate how theta, implied volatility, dividends, assignment, and margin affect combined positions.",
+        "Plan how the position should respond to a flat market, a fast move, a slow move, or thesis failure."
+      ],
+      "checkpoint": "Build one combined position, label the purpose of each leg, and write the adjustment plan for three different price paths.",
       "focus": [
         "Blend stock and option legs for more specific risk/reward outcomes.",
         "Understand how time decay, assignment risk, and rolling decisions affect combined positions."
@@ -133,6 +175,13 @@
       "order": 7,
       "title": "Trade management and checklists",
       "summary": "Rolling, assignment, when to close winners, and pre-trade questions every plan needs.",
+      "chapter_goal": "Turn a trade idea into a complete lifecycle plan covering entry, adjustment, exit, and capital protection.",
+      "objectives": [
+        "Set profit targets, loss limits, invalidation, and time-based exits before entering a position.",
+        "Evaluate rolling, assignment, margin expansion, and early closing without treating adjustments as automatic.",
+        "Use a pre-trade checklist to reject trades whose thesis, liquidity, structure, or risk is incomplete."
+      ],
+      "checkpoint": "Complete the pre-trade checklist for one real setup, including the conditions for entry, adjustment, exit, and no trade.",
       "focus": [
         "Manage trades after entry instead of only planning the opening trade.",
         "Use checklists to confirm thesis, max loss, invalidation, liquidity, and regime fit before capital is at risk."

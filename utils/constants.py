@@ -84,6 +84,7 @@ SUBMENUS = {
         "Compare stocks",
     ],
     "Scan Trades": [
+        "Going Up",
         "Bottom Phising",
         "Breakout scan",
         "Pullback scan",
