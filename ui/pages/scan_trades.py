@@ -1419,7 +1419,10 @@ def _render_going_up_verification(
 def _render_universe_manager() -> None:
     """Manage the saved stock universe used by scanners."""
     status = universe_file_status()
-    with st.expander("Symbol CSV file", expanded=not status["exists"]):
+    import_message = st.session_state.pop("scan_universe_import_message", None)
+    with st.expander("Symbol CSV file", expanded=True):
+        if import_message:
+            st.success(import_message)
         if status["exists"]:
             st.success(f"Loaded **{status['count']:,}** symbols from `{status['path']}`.")
             if status.get("parse_method") == "lenient_text":
@@ -1429,7 +1432,9 @@ def _render_universe_manager() -> None:
                 )
                 if st.button("Rewrite as clean CSV", key="scan_rewrite_universe_csv"):
                     cleaned = save_stock_universe(load_stock_universe())
-                    st.success(f"Saved {len(cleaned):,} symbols in clean CSV format.")
+                    st.session_state.scan_universe_import_message = (
+                        f"Saved {len(cleaned):,} symbols in clean CSV format."
+                    )
                     st.rerun()
         else:
             st.warning(f"No symbol file found yet. Add or upload a CSV at `{status['path']}`.")
@@ -1437,21 +1442,57 @@ def _render_universe_manager() -> None:
         uploaded = st.file_uploader(
             "Upload symbol CSV",
             type=["csv"],
-            help="Use one `symbol` column, or a one-column CSV where the first column contains symbols.",
+            help=(
+                "Prefer a CSV with a Symbol or Ticker column (Nasdaq/Yahoo style). "
+                "The Name/company column is ignored. One-column symbol lists also work."
+            ),
             key="scan_universe_upload",
         )
         if uploaded is not None:
-            try:
-                imported = import_stock_universe_csv(uploaded.getvalue())
-                st.success(f"Imported {len(imported):,} symbols from file and saved a clean CSV.")
-                st.rerun()
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"CSV import failed: {exc}")
+            # Streamlit keeps the uploaded file across reruns. Import only once per unique upload
+            # or the page will flicker in an endless import → rerun loop.
+            upload_id = (uploaded.name, int(uploaded.size), uploaded.getvalue()[:64])
+            if st.session_state.get("scan_universe_upload_id") != upload_id:
+                try:
+                    imported = import_stock_universe_csv(uploaded.getvalue())
+                    st.session_state.scan_universe_upload_id = upload_id
+                    st.session_state.scan_universe_import_message = (
+                        f"Imported {len(imported):,} symbols from `{uploaded.name}` and saved a clean CSV."
+                    )
+                    _clear_scan_results_after_universe_change()
+                    st.rerun()
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"CSV import failed: {exc}")
 
         preview = load_stock_universe().head(20)
         if not preview.empty:
             st.markdown("**Symbol file preview (first 20 rows)**")
             st.dataframe(preview, use_container_width=True, hide_index=True)
+
+
+def _clear_scan_results_after_universe_change() -> None:
+    """Drop cached scan shortlists so they cannot mix with a newly imported universe."""
+    for key in (
+        "going_up_scan_results",
+        "going_up_scan_unavailable",
+        "going_up_going_up_results",
+        "breakout_scan_results",
+        "breakout_scan_unavailable",
+        "breakout_refined_results",
+        "breakout_going_up_results",
+        "pullback_scan_results",
+        "pullback_scan_unavailable",
+        "pullback_refined_results",
+        "pullback_going_up_results",
+        "rsi_all_results",
+        "rsi_candidate_results",
+        "rsi_screener_unavailable",
+        "rsi_screener_results",
+        "rsi_favorite_detail_unavailable",
+        "rsi_stage3_scores",
+        "scan_bottom_going_up_results",
+    ):
+        st.session_state.pop(key, None)
 
 
 def _resolve_scan_universe() -> list[str]:
