@@ -35,14 +35,15 @@ from ui.pages import (
 )
 from services.market_data_service import get_market_data_status
 from services.settings_service import load_user_settings
+from utils.app_auth import require_app_login
 from utils.branding import LOGO_SIDEBAR
-from utils.config import load_dotenv_if_present
+from utils.config import load_runtime_secrets
 from utils.constants import APP_NAME
 
 # Browser tab icon: use logo when available
 _page_icon = str(LOGO_SIDEBAR) if LOGO_SIDEBAR.exists() else "📈"
 
-load_dotenv_if_present()
+load_runtime_secrets()
 _app_settings = load_user_settings()
 
 # ── Page configuration (must be first Streamlit command) ──────────────────────
@@ -56,6 +57,10 @@ st.set_page_config(
 # ── Global styling ────────────────────────────────────────────────────────────
 # Theme is resolved inside get_custom_css() from user settings (no positional arg for Streamlit reload safety).
 st.markdown(get_custom_css(), unsafe_allow_html=True)
+
+# ── Optional family password (required on Streamlit Cloud when APP_PASSWORD is set)
+if not require_app_login():
+    st.stop()
 
 # ── Sidebar navigation ────────────────────────────────────────────────────────
 main_section, submenu = render_sidebar()
